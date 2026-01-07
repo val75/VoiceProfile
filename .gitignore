@@ -1,0 +1,17 @@
+# Ignore Mac system files
+.DS_store
+
+# Environments
+venv/
+
+# Files
+.env_remote
+
+# App generated directories
+migrations/
+
+# JetBrains (need to refine)
+.idea
+
+# Any .wav files
+*.wav

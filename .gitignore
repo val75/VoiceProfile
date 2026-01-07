@@ -6,6 +6,7 @@ venv/
 
 # Files
 .env_remote
+.env
 
 # App generated directories
 migrations/

@@ -1,0 +1,10 @@
+Flask>=2.0
+flask_sqlalchemy
+flask-migrate
+alembic
+python-dotenv
+psycopg2-binary
+pydub
+whisper       # optional; heavy - only if you can install it
+openai        # optional - for LLM fallback
+vosk          # optional fallback STT

@@ -1,12 +1,21 @@
 # app/blueprints/voice_input/routes.py
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, render_template
 from services.stt_service import transcribe_audio, SpeechToTextError
 from services.nlp_service import extract_profile_data
 from extensions.database import db
 from models.profile import Profile
 
-voice_input_bp = Blueprint("voice_input", __name__)
+voice_input_bp = Blueprint("voice_input",
+                           __name__,
+                           url_prefix="/voice",
+                           template_folder="templates"
+                           )
+
+
+@voice_input_bp.route("/record", methods=["GET"])
+def record_page():
+    return render_template("voice_input/record.html", debug_marker="VOICE_INPUT_RECORD")
 
 
 @voice_input_bp.route("/transcribe", methods=["POST"])

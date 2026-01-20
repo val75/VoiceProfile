@@ -1,155 +1,49 @@
 <!DOCTYPE html>
-<html>
-  <head>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Record Voice</title>
-  </head>
-  <body>
-    <h1>{{ debug_marker }}</h1>
-    <h2>Tell us about your work</h2>
+    <title>Voice Recorder</title>
+    <link rel="stylesheet" href="{{ url_for('voice_input.static', filename='voice_input/css/recorder.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>🎙️ Voice Recorder</h1>
+        <h2>Tell us about your work</h2>
 
-    <button id="record">🎙️ Record</button>
-    <button id="stop" disabled>⏹ Stop</button>
-    <button id="send" disabled>📤 Send</button>
+        <div class="timer" id="timer">00:00</div>
 
-    <p id="status"></p>
+        <div class="visualizer" id="visualizer">
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+        </div>
 
-    <script>
-      console.log("Script loaded");
+        <div class="controls">
+            <button id="record">
+                <span>🎙️</span>
+                <span id="recordText">Record</span>
+            </button>
+            <button id="stop" disabled>
+                <span>⏹</span>
+                <span>Stop</span>
+            </button>
+            <button id="send" disabled>
+                <span>📤</span>
+                <span>Send</span>
+            </button>
+        </div>
 
-      function getAudioStream() {
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-          return navigator.mediaDevices.getUserMedia({ audio: true });
-        }
+        <div class="status-container">
+            <p id="status">Ready to record</p>
+        </div>
+    </div>
 
-        const legacyGetUserMedia =
-          navigator.getUserMedia ||
-          navigator.webkitGetUserMedia ||
-          navigator.mozGetUserMedia;
-
-        if (!legacyGetUserMedia) {
-          return Promise.reject(
-            new Error("getUserMedia not supported in this browser")
-          );
-        }
-
-        return new Promise((resolve, reject) => {
-          legacyGetUserMedia.call(
-            navigator,
-            { audio: true },
-            resolve,
-            reject
-          );
-        });
-      }
-
-      let mediaRecorder = null;
-      let mediaStream = null;
-      let audioChunks = [];
-
-      const status = document.getElementById("status");
-      const recordBtn = document.getElementById("record");
-      const stopBtn = document.getElementById("stop");
-      const sendBtn = document.getElementById("send");
-
-      console.log("MediaRecorder exists:", typeof MediaRecorder !== "undefined");
-      console.log("navigator.mediaDevices:", navigator.mediaDevices);
-
-      recordBtn.onclick = async () => {
-        console.log("Record clicked");
-        status.textContent = "Recording…";
-
-        try {
-          const stream = await getAudioStream();
-          console.log("Got audio stream");
-          mediaStream = stream; // store globally
-          // Capture stream locally for onstop (IMPORTANT)
-          const localStream = stream;
-
-          mediaRecorder = new MediaRecorder(stream, {
-            mimeType: "audio/mp4"
-          });
-
-          mediaRecorder.onstart = () => {
-            recordBtn.disabled = true;
-            stopBtn.disabled = false;
-            console.log("Recorder started");
-          };
-
-          mediaRecorder.onstop = () => {
-            // UI reset happens here
-            recordBtn.disabled = false;
-            stopBtn.disabled = true;
-
-            // 🔴 CRITICAL: release the mic
-            localStream.getTracks().forEach(track => track.stop());
-
-            // Clear global reference AFTER stopping tracks
-            if (mediaStream === localStream) {
-              mediaStream = null;
-             }
-          };
-
-          mediaRecorder.onerror = (e) => {
-            console.error("Recorder error:", e);
-          };
-
-          mediaRecorder.ondataavailable = (e) => {
-            console.log("Data available:", e.data.size);
-            if (e.data.size > 0) {
-              audioChunks.push(e.data);
-            }
-          };
-
-          // Start recording
-          mediaRecorder.start();
-        } catch (err) {
-          console.error("Audio capture failed:", err);
-          alert(err.message);
-        };
-
-        // const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-      };
-
-      stopBtn.onclick = () => {
-        if (mediaRecorder && mediaRecorder.state === "recording") {
-          mediaRecorder.stop();
-          status.textContent = "Recording stopped.";
-        }
-
-        console.log("Recording stopped");
-
-        //stopBtn.disabled = true;
-        sendBtn.disabled = false;
-      };
-
-      sendBtn.onclick = async () => {
-        if (!audioChunks.length) {
-          alert("No audio recorded");
-          return;
-        }
-
-        sendBtn.disabled = true;
-
-        status.textContent = "Uploading…";
-
-        //const blob = new Blob(audioChunks, { type: "audio/webm" });
-        const blob = new Blob(audioChunks, { type: "audio/mp4" });
-        const formData = new FormData();
-        //formData.append("audio", blob, "voice.webm");
-        formData.append("audio", blob, "voice.mp4");
-
-        const res = await fetch("/voice/transcribe", {
-          method: "POST",
-          body: formData
-        });
-
-        const data = await res.json();
-        status.textContent = data.text || "Error";
-
-        sendBtn.disabled = false;
-      };
-    </script>
-  </body>
+    <script type="module" src="{{ url_for('voice_input.static', filename='voice_input/js/main.js') }}"></script>
+</body>
 </html>

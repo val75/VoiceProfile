@@ -9,7 +9,8 @@ from models.profile import Profile
 voice_input_bp = Blueprint("voice_input",
                            __name__,
                            url_prefix="/voice",
-                           template_folder="templates"
+                           template_folder="templates",
+                           static_folder="static",
                            )
 
 

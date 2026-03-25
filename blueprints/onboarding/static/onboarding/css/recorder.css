@@ -1,0 +1,266 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.container {
+  background: white;
+  border-radius: 20px;
+  padding: 40px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  max-width: 500px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+h1 {
+  color: #333;
+  margin-bottom: 30px;
+  font-size: 28px;
+  text-align: center;
+  line-height: 1.4;
+  width: 100%;
+}
+
+.controls {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+button {
+  flex: 1;
+  min-width: 120px;
+  padding: 14px 20px;
+  font-size: 16px;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#record {
+  background: #10b981;
+  color: white;
+}
+
+#record:hover:not(:disabled) {
+  background: #059669;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+}
+
+#record.recording {
+  background: #ef4444;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+#stop {
+  background: #f59e0b;
+  color: white;
+}
+
+#stop:hover:not(:disabled) {
+  background: #d97706;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+}
+
+#send {
+  background: #3b82f6;
+  color: white;
+}
+
+#send:hover:not(:disabled) {
+  background: #2563eb;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+.status-container {
+  background: #f3f4f6;
+  border-radius: 10px;
+  padding: 16px;
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+#status {
+  color: #374151;
+  font-size: 15px;
+  text-align: center;
+  line-height: 1.5;
+}
+
+#status.error {
+  color: #dc2626;
+}
+
+#status.success {
+  color: #059669;
+}
+
+.timer {
+  font-size: 24px;
+  font-weight: 700;
+  color: #667eea;
+  margin: 20px 0;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.visualizer {
+  height: 80px;
+  background: #f3f4f6;
+  border-radius: 10px;
+  margin: 20px 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 10px;
+  width: 100%;
+}
+
+.visualizer.active {
+  display: flex;
+}
+
+.bar {
+  width: 4px;
+  background: linear-gradient(to top, #667eea, #764ba2);
+  border-radius: 2px;
+  transition: height 0.1s ease;
+}
+
+/* ── Confirmation panel ───────────────────────────────────────────────── */
+#confirmPanel {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+  width: 100%;
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #e5e7eb;
+  animation: fadeUp 0.3s ease both;
+}
+
+#confirmPanel.visible {
+  display: flex;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+#heardLabel {
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+
+#heardName {
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-align: center;
+  word-break: break-word;
+  width: 100%;
+}
+
+.confirm-buttons {
+  display: flex;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.confirm-buttons button {
+  flex: 1;
+  min-width: unset;
+  padding: 0.6rem 1.4rem;
+  border-radius: 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: opacity 0.15s, transform 0.1s;
+}
+
+.confirm-buttons button:active {
+  transform: scale(0.97);
+}
+
+#btnConfirm {
+  background: #22c55e;
+  color: #fff;
+}
+
+#btnRetry {
+  background: transparent;
+  color: #374151;
+  border-color: currentColor;
+  opacity: 0.7;
+}
+
+#btnEdit {
+  background: #6366f1;
+  color: #fff;
+}
+
+#btnConfirm:disabled,
+#btnEdit:disabled,
+#btnRetry:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.edit-input {
+  width: 100%;
+  font-size: 1.25rem;
+  font-weight: 600;
+  text-align: center;
+  padding: 0.5rem;
+  border: 2px solid #6366f1;
+  border-radius: 0.5rem;
+  font-family: inherit;
+  resize: vertical;
+}
+
+input.edit-input {
+  font-size: 1.5rem;
+}

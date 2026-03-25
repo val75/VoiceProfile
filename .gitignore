@@ -17,3 +17,6 @@ migrations/
 
 # Any .wav files
 *.wav
+
+# .md files
+*.md

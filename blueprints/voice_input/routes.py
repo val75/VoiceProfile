@@ -4,7 +4,7 @@ from flask import Blueprint, request, jsonify, render_template
 from services.stt_service import transcribe_audio, SpeechToTextError
 from services.nlp_service import extract_profile_data
 from extensions.database import db
-from models.profile import Profile
+from models.profile import WorkerProfile
 
 voice_input_bp = Blueprint("voice_input",
                            __name__,
@@ -53,7 +53,7 @@ def upload_audio():
     structured = extract_profile_data(transcript)
 
     # Step 3: Store in DB
-    profile = Profile(name=structured.get("name"), profile_data=structured)
+    profile = WorkerProfile(name=structured.get("name"), profile_data=structured)
     db.session.add(profile)
     db.session.commit()
 

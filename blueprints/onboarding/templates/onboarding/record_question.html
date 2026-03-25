@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Recorder</title>
+    <link rel="stylesheet" href="{{ url_for('onboarding.static', filename='onboarding/css/recorder.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Question text is passed from backend -->
+        <h1 id="questionText">{{ question_text }}</h1>
+
+        <div class="timer" id="timer">00:00</div>
+
+        <div class="visualizer" id="visualizer">
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+            <div class="bar"></div>
+        </div>
+
+        <div class="controls">
+            <button id="record">
+                <span>🎙️</span>
+                <span id="recordText">Record</span>
+            </button>
+            <button id="stop" disabled>
+                <span>⏹</span>
+                <span>Stop</span>
+            </button>
+            <button id="send" disabled>
+                <span>📤</span>
+                <span>Send</span>
+            </button>
+        </div>
+
+        <div class="status-container">
+            <p id="status">Ready to record</p>
+        </div>
+
+        <!-- Confirmation panel — hidden until transcription succeeds -->
+        <div id="confirmPanel" role="region" aria-live="polite">
+            <span id="heardLabel">We heard</span>
+            <span id="heardName"></span>
+            <div class="confirm-buttons">
+                <button id="btnConfirm">✓ That's right</button>
+                <button id="btnEdit" style="display:none">✏ Edit</button>
+                <button id="btnRetry">↩ Re-record</button>
+            </div>
+        </div>
+
+        <!-- Hidden field to pass question_id from backend Flask route to frontend -->
+        <input type="hidden" id="questionId" value="{{ question_id }}">
+        <input type="hidden" id="transcribeUrl" value="{{ transcribe_url }}">
+    </div>
+
+    <!-- Scripts loaded in dependency order -->
+    <script src="{{ url_for('onboarding.static', filename='onboarding/js/audioVisualizer.js') }}"></script>
+    <script src="{{ url_for('onboarding.static', filename='onboarding/js/voiceRecorder.js') }}"></script>
+    <script src="{{ url_for('onboarding.static', filename='onboarding/js/confirmHandler.js') }}"></script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 # app/models/__init__.py
 
 # Imports all models for use in app
-from .profile import Profile
+from .profile import WorkerProfile
 
-__all__ = ["Profile"]
+__all__ = ["WorkerProfile"]

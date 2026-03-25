@@ -6,6 +6,7 @@ from extensions.database import db, migrate
 from blueprints.voice_input.routes import voice_input_bp
 from blueprints.profile_builder.routes import profile_builder_bp
 from blueprints.profiles.routes import profiles_bp
+from blueprints.onboarding.routes import onboarding_bp
 
 
 def create_app():
@@ -18,6 +19,7 @@ def create_app():
     myapp.register_blueprint(voice_input_bp, url_prefix="/voice")
     myapp.register_blueprint(profile_builder_bp, url_prefix="/builder")
     myapp.register_blueprint(profiles_bp, url_prefix="/profiles")
+    myapp.register_blueprint(onboarding_bp, url_prefix="/onboarding")
 
     @myapp.cli.command("init-db")
     def init_db():
@@ -31,6 +33,8 @@ def create_app():
         """Drop and recreate all database tables."""
         from flask import current_app
         from extensions.database import db
+
+        print("Connecting to:", current_app.config["SQLALCHEMY_DATABASE_URI"])
 
         if not current_app.debug:
             print("❌ Refusing to reset DB outside debug mode")

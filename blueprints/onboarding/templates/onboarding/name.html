@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Your Name</title>
+
+  <link
+    rel="stylesheet"
+    href="{{ url_for('onboarding.static', filename='onboarding/css/name.css') }}"
+  />
+</head>
+<body>
+
+  <h2>What is your full name?</h2>
+
+  <button id="recordBtn">Record</button>
+  <button id="stopBtn" disabled>Stop</button>
+  <button id="sendBtn">Continue</button>
+
+  <div class="recording-indicator" id="recordingIndicator" style="display:none;">
+    <span class="pulse"></span> Recording...
+  </div>
+
+  <div class="transcription-box" id="transcriptionBox">
+    Your transcription will appear here.
+  </div>
+
+  <div id="confirmationSection" style="display:none;">
+    <p id="confirmationText"></p>
+
+    <button id="confirmYes">Yes</button>
+    <button id="confirmNo">No</button>
+  </div>
+
+  <p id="transcript"></p>
+
+  <script>
+    const PROFILE_ID = {{ profile_id }};
+  </script>
+
+  <script
+    src="{{ url_for('onboarding.static', filename='onboarding/js/name.js') }}"
+    defer
+  ></script>
+
+</body>
+</html>

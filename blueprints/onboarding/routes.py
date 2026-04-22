@@ -5,7 +5,11 @@ from extensions.database import db
 from models.profile import WorkerProfile
 from . import onboarding_bp
 from services.stt_service import transcribe_audio, SpeechToTextError
+from services.nlp_service import extract_profile_data, ExtractionError
 import re
+import logging
+
+logger = logging.getLogger(__name__)
 
 ONBOARDING_STEPS = [
     "name",
@@ -344,9 +348,15 @@ def voice_confirm(profile_id, step):
         is_last = step_index == len(VOICE_STEPS) - 1
 
         if is_last:
+            try:
+                profile.profile_data = extract_profile_data(profile.transcripts or {})
+            except ExtractionError as e:
+                logger.error("Profile extraction failed for %d: %s", profile.id, e)
+                profile.profile_data = {"extraction_error": str(e)}
+
             profile.onboarding_state = "review"
             db.session.commit()
-            next_url = url_for("profiles.get_profile", profile_id=profile.id)
+            next_url = url_for("onboarding.review_step", profile_id=profile.id)
         else:
             next_step = VOICE_STEPS[step_index + 1]
             profile.onboarding_state = next_step
@@ -364,3 +374,51 @@ def voice_confirm(profile_id, step):
             "success": True,
             "retry_url": url_for("onboarding.voice_step", profile_id=profile.id, step=step)
         })
+
+
+# ---------------------------------------------------------------------------
+# Review step: show extracted profile data for validation
+# ---------------------------------------------------------------------------
+
+@onboarding_bp.route("/<int:profile_id>/review")
+def review_step(profile_id):
+    """Render the profile review page with extracted structured data."""
+    profile = WorkerProfile.query.get_or_404(profile_id)
+    profile_data = profile.profile_data or {}
+    has_error = "extraction_error" in profile_data
+
+    return render_template(
+        "onboarding/review.html",
+        profile=profile,
+        profile_data=profile_data,
+        has_error=has_error,
+    )
+
+
+@onboarding_bp.route("/<int:profile_id>/review", methods=["POST"])
+def save_review(profile_id):
+    """Save the user-edited profile data."""
+    profile = WorkerProfile.query.get_or_404(profile_id)
+
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Missing profile data"}), 400
+
+    profile.profile_data = data
+    profile.onboarding_state = "completed"
+    db.session.commit()
+
+    return jsonify({"success": True, "next_url": url_for("profiles.view_profile", profile_id=profile.id)})
+
+
+@onboarding_bp.route("/<int:profile_id>/review/re-extract", methods=["POST"])
+def re_extract(profile_id):
+    """Re-run LLM extraction on existing transcripts."""
+    profile = WorkerProfile.query.get_or_404(profile_id)
+
+    try:
+        profile.profile_data = extract_profile_data(profile.transcripts or {})
+        db.session.commit()
+        return jsonify({"success": True, "profile_data": profile.profile_data})
+    except ExtractionError as e:
+        return jsonify({"error": str(e)}), 502

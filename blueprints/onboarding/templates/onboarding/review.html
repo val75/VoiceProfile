@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Review Your Profile</title>
+    <link rel="stylesheet" href="{{ url_for('onboarding.static', filename='onboarding/css/review.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Review Your Profile</h1>
+        <p class="subtitle">Hi <strong>{{ profile.name }}</strong>, here's what we extracted from your answers. Please review and correct anything that's wrong.</p>
+
+        {% if has_error %}
+        <div class="error-banner" id="errorBanner">
+            <p>We had trouble extracting your profile data automatically. You can try again or fill in the details manually.</p>
+            <button id="btnReExtract" class="btn btn-outline">Re-extract from Transcripts</button>
+        </div>
+        {% endif %}
+
+        <!-- Skills Section -->
+        <section class="section">
+            <h2>Skills</h2>
+            <div id="skillsList"></div>
+            <button type="button" id="btnAddSkill" class="btn btn-small btn-outline">+ Add Skill</button>
+        </section>
+
+        <!-- Experience Section -->
+        <section class="section">
+            <h2>Experience</h2>
+            <div class="field-row">
+                <label for="totalYears">Total Years of Experience</label>
+                <input type="number" id="totalYears" min="0" max="99" class="input-sm">
+            </div>
+            <div class="field-row">
+                <label for="experienceSummary">Summary</label>
+                <textarea id="experienceSummary" rows="2" class="input-full"></textarea>
+            </div>
+            <h3>Roles</h3>
+            <div id="rolesList"></div>
+            <button type="button" id="btnAddRole" class="btn btn-small btn-outline">+ Add Role</button>
+        </section>
+
+        <!-- Availability Section -->
+        <section class="section">
+            <h2>Availability</h2>
+            <div class="field-row">
+                <label>Days Available</label>
+                <div class="day-checkboxes" id="dayCheckboxes">
+                    <label class="day-label"><input type="checkbox" value="monday"> Mon</label>
+                    <label class="day-label"><input type="checkbox" value="tuesday"> Tue</label>
+                    <label class="day-label"><input type="checkbox" value="wednesday"> Wed</label>
+                    <label class="day-label"><input type="checkbox" value="thursday"> Thu</label>
+                    <label class="day-label"><input type="checkbox" value="friday"> Fri</label>
+                    <label class="day-label"><input type="checkbox" value="saturday"> Sat</label>
+                    <label class="day-label"><input type="checkbox" value="sunday"> Sun</label>
+                </div>
+            </div>
+            <div class="field-row">
+                <label for="shiftPreference">Shift Preference</label>
+                <select id="shiftPreference" class="input-sm">
+                    <option value="">-- Select --</option>
+                    <option value="morning">Morning</option>
+                    <option value="afternoon">Afternoon</option>
+                    <option value="evening">Evening</option>
+                    <option value="night">Night</option>
+                    <option value="flexible">Flexible</option>
+                </select>
+            </div>
+            <div class="field-row">
+                <label for="availabilityNotes">Notes</label>
+                <textarea id="availabilityNotes" rows="2" class="input-full"></textarea>
+            </div>
+        </section>
+
+        <!-- Actions -->
+        <div class="actions">
+            <button id="btnSave" class="btn btn-primary">Save Profile</button>
+            <button id="btnReExtractBottom" class="btn btn-outline">Re-extract from Transcripts</button>
+        </div>
+
+        <div id="statusMsg" class="status-msg"></div>
+    </div>
+
+    <!-- Inject profile data as JSON for JS -->
+    <script>
+        window.__profileData = {{ profile_data | tojson }};
+        window.__profileId = {{ profile.id }};
+        window.__reviewUrl = "{{ url_for('onboarding.save_review', profile_id=profile.id) }}";
+        window.__reExtractUrl = "{{ url_for('onboarding.re_extract', profile_id=profile.id) }}";
+    </script>
+    <script src="{{ url_for('onboarding.static', filename='onboarding/js/review.js') }}"></script>
+</body>
+</html>

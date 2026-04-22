@@ -13,3 +13,6 @@ class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "dev_secret")
     WHISPER_URL = os.getenv("WHISPER_URL")
     WHISPER_API_KEY = os.getenv("WHISPER_API_KEY")
+    LLM_URL = os.getenv("LLM_URL", "http://localhost:11434/v1")
+    LLM_MODEL = os.getenv("LLM_MODEL", "mistral:7b-instruct")
+    LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", "30"))

@@ -4,6 +4,7 @@ from flask import render_template, request, jsonify, redirect, url_for, session
 from extensions.database import db
 from models.profile import WorkerProfile
 from . import onboarding_bp
+from blueprints.auth.decorators import profile_owner_required
 from services.stt_service import transcribe_audio, SpeechToTextError
 from services.nlp_service import extract_profile_data, ExtractionError
 import re
@@ -109,16 +110,8 @@ def transcribe():
 
 @onboarding_bp.route("/start")
 def start_onboarding():
-    """Create a fresh profile and kick off the onboarding flow."""
-    profile = WorkerProfile()
-    db.session.add(profile)
-    db.session.commit()
-
-    # Store profile_id in session so subsequent steps can access it without
-    # passing it through every URL (though we also accept it as a URL param).
-    session['profile_id'] = profile.id
-
-    return redirect(url_for("onboarding.name_step", profile_id=profile.id))
+    """Entry point kept for backwards compatibility. Auth now handles profile creation."""
+    return redirect(url_for("auth.login"))
 
 
 # @onboarding_bp.route("/<int:profile_id>/name")
@@ -131,6 +124,7 @@ def start_onboarding():
 #    )
 
 @onboarding_bp.route("/<int:profile_id>/name")
+@profile_owner_required
 def name_step(profile_id):
     """Render the generic recording page for the name question."""
     profile = WorkerProfile.query.get_or_404(profile_id)
@@ -177,6 +171,7 @@ def name_step(profile_id):
 #    })
 
 @onboarding_bp.route("/<int:profile_id>/name/transcribe", methods=["POST"])
+@profile_owner_required
 def name_transcribe(profile_id):
     """Receive the audio, transcribe it, clean the name, and persist it."""
     profile = WorkerProfile.query.get_or_404(profile_id)
@@ -233,6 +228,7 @@ def name_transcribe(profile_id):
 #        })
 
 @onboarding_bp.route("/<int:profile_id>/name/confirm", methods=["POST"])
+@profile_owner_required
 def confirm_name(profile_id):
     """
         The client sends { confirmed: true/false }
@@ -281,6 +277,7 @@ GENERIC_STEPS = VOICE_STEPS[1:]  # ["skills", "experience", "availability"]
 
 
 @onboarding_bp.route("/<int:profile_id>/<step>")
+@profile_owner_required
 def voice_step(profile_id, step):
     """Render the recording page for skills, experience, or availability."""
     if step not in GENERIC_STEPS:
@@ -297,6 +294,7 @@ def voice_step(profile_id, step):
 
 
 @onboarding_bp.route("/<int:profile_id>/<step>/transcribe", methods=["POST"])
+@profile_owner_required
 def voice_transcribe(profile_id, step):
     """Transcribe audio for a generic voice step and store it."""
     if step not in GENERIC_STEPS:
@@ -324,6 +322,7 @@ def voice_transcribe(profile_id, step):
 
 
 @onboarding_bp.route("/<int:profile_id>/<step>/confirm", methods=["POST"])
+@profile_owner_required
 def voice_confirm(profile_id, step):
     """Confirm or reject the transcription for a generic voice step."""
     if step not in GENERIC_STEPS:
@@ -381,6 +380,7 @@ def voice_confirm(profile_id, step):
 # ---------------------------------------------------------------------------
 
 @onboarding_bp.route("/<int:profile_id>/review")
+@profile_owner_required
 def review_step(profile_id):
     """Render the profile review page with extracted structured data."""
     profile = WorkerProfile.query.get_or_404(profile_id)
@@ -396,6 +396,7 @@ def review_step(profile_id):
 
 
 @onboarding_bp.route("/<int:profile_id>/review", methods=["POST"])
+@profile_owner_required
 def save_review(profile_id):
     """Save the user-edited profile data."""
     profile = WorkerProfile.query.get_or_404(profile_id)
@@ -412,6 +413,7 @@ def save_review(profile_id):
 
 
 @onboarding_bp.route("/<int:profile_id>/review/re-extract", methods=["POST"])
+@profile_owner_required
 def re_extract(profile_id):
     """Re-run LLM extraction on existing transcripts."""
     profile = WorkerProfile.query.get_or_404(profile_id)

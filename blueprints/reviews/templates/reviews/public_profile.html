@@ -3,35 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ profile.name }}'s Profile</title>
-    <link rel="stylesheet" href="{{ url_for('profiles.static', filename='profiles/css/view.css') }}">
+    <title>{{ profile.name }}</title>
+    <link rel="stylesheet" href="{{ url_for('reviews.static', filename='reviews/css/reviews.css') }}">
 </head>
 <body>
     <div class="container">
         {% set d = profile.profile_data or {} %}
+
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for msg in messages %}
+                <div class="flash">{{ msg }} <button onclick="this.parentElement.remove()" style="float:right;background:none;border:none;cursor:pointer;font-size:16px;color:#dc2626;line-height:1">✕</button></div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
 
         <div class="header">
             <div>
                 <h1>{{ profile.name }}</h1>
                 <p>Worker Profile</p>
             </div>
-            <a href="{{ edit_url }}" class="btn-edit">✏ Edit Profile</a>
-        </div>
-
-        <!-- QR code sharing block -->
-        <div class="section" style="display:flex;align-items:center;gap:24px;flex-wrap:wrap">
-            <img src="{{ url_for('profiles.qr_code', profile_id=profile.id) }}"
-                 alt="QR code linking to your public profile"
-                 style="width:100px;height:100px;border-radius:8px">
-            <div>
-                <p style="font-weight:600;color:#111827;margin-bottom:4px">Share your profile</p>
-                <p style="font-size:13px;color:#6b7280;margin-bottom:8px">Anyone who scans this QR code can view your profile and leave a review.</p>
-                <a href="{{ url_for('profiles.qr_code', profile_id=profile.id) }}"
-                   download="qr-{{ profile.id }}.png"
-                   style="font-size:13px;color:#6366f1;font-weight:600;text-decoration:none">
-                    ⬇ Download QR
-                </a>
-            </div>
+            <a href="{{ url_for('reviews.new_review', profile_id=profile.id) }}" class="btn-primary">
+                ✏ Write a Review
+            </a>
         </div>
 
         <!-- Skills -->
@@ -105,19 +99,19 @@
             <h2>Reviews</h2>
             {% if reviews %}
                 {% for review in reviews %}
-                <div style="background:#f9fafb;border-radius:10px;padding:16px;margin-bottom:12px">
-                    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px;margin-bottom:8px">
-                        <span style="font-weight:600;color:#111827">{{ review.reviewer_name }}</span>
-                        <span style="color:#f59e0b;font-size:16px;letter-spacing:1px">
+                <div class="review-card">
+                    <div class="review-header">
+                        <span class="reviewer-name">{{ review.reviewer_name }}</span>
+                        <span class="review-stars">
                             {% for _ in range(review.rating) %}★{% endfor %}{% for _ in range(5 - review.rating) %}☆{% endfor %}
                         </span>
-                        <span style="font-size:12px;color:#9ca3af">{{ review.created_at.strftime('%b %d, %Y') }}</span>
+                        <span class="review-date">{{ review.created_at.strftime('%b %d, %Y') }}</span>
                     </div>
-                    <p style="font-size:14px;color:#374151;line-height:1.6">{{ review.content }}</p>
+                    <p class="review-content">{{ review.content }}</p>
                 </div>
                 {% endfor %}
             {% else %}
-            <p class="empty">No reviews yet — share your QR code to get your first one!</p>
+            <p class="empty">No reviews yet. Be the first to leave one!</p>
             {% endif %}
         </div>
 

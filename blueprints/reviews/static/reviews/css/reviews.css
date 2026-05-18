@@ -1,0 +1,310 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    display: grid;
+    place-items: start center;
+    padding: 20px;
+}
+
+.container {
+    background: white;
+    border-radius: 20px;
+    padding: 40px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    max-width: 600px;
+    width: 100%;
+    margin: 20px auto;
+}
+
+/* ── Header ────────────────────────────────────────────────────────────── */
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 28px;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.header h1 { font-size: 26px; color: #111827; }
+.header p  { font-size: 14px; color: #9ca3af; margin-top: 4px; }
+
+.btn-primary {
+    padding: 10px 20px;
+    background: #6366f1;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    white-space: nowrap;
+}
+.btn-primary:hover { background: #4f46e5; }
+
+.btn-secondary {
+    padding: 8px 16px;
+    background: transparent;
+    color: #6b7280;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+}
+.btn-secondary:hover { border-color: #9ca3af; color: #374151; }
+
+/* ── Profile sections ──────────────────────────────────────────────────── */
+.section {
+    margin-bottom: 24px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid #e5e7eb;
+}
+.section:last-of-type { border-bottom: none; margin-bottom: 0; }
+
+.section h2 {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #9ca3af;
+    margin-bottom: 12px;
+}
+
+.skills-list { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.skill-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #eef2ff;
+    color: #4338ca;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.skill-tag .years {
+    background: #c7d2fe;
+    color: #3730a3;
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-size: 12px;
+}
+
+.exp-summary { font-size: 15px; color: #374151; margin-bottom: 14px; }
+
+.role-item {
+    padding: 10px 14px;
+    background: #f9fafb;
+    border-radius: 10px;
+    margin-bottom: 8px;
+}
+.role-title { font-weight: 600; color: #111827; font-size: 15px; }
+.role-meta { font-size: 13px; color: #6b7280; margin-top: 2px; }
+.role-desc { font-size: 13px; color: #4b5563; margin-top: 6px; }
+
+.days-list { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+
+.day-pill {
+    padding: 4px 12px;
+    background: #d1fae5;
+    color: #065f46;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 500;
+    text-transform: capitalize;
+}
+
+.avail-detail { font-size: 14px; color: #374151; margin-top: 6px; }
+.avail-detail span { font-weight: 600; }
+
+.empty { color: #9ca3af; font-size: 14px; font-style: italic; }
+
+/* ── Reviews list ──────────────────────────────────────────────────────── */
+.review-card {
+    background: #f9fafb;
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 12px;
+}
+.review-card:last-child { margin-bottom: 0; }
+
+.review-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.reviewer-name { font-weight: 600; color: #111827; font-size: 15px; }
+
+.review-stars { color: #f59e0b; font-size: 16px; letter-spacing: 1px; }
+
+.review-date { font-size: 12px; color: #9ca3af; }
+
+.review-content { font-size: 14px; color: #374151; line-height: 1.6; }
+
+/* ── Flash messages ────────────────────────────────────────────────────── */
+.flash {
+    background: #fef2f2;
+    color: #dc2626;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    font-size: 14px;
+}
+
+/* ── Review form ───────────────────────────────────────────────────────── */
+.form-group { margin-bottom: 20px; }
+
+.form-group label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.form-group input[type="text"],
+.form-group textarea {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 15px;
+    font-family: inherit;
+    color: #111827;
+    resize: vertical;
+    transition: border-color 0.15s;
+}
+
+.form-group input[type="text"]:focus,
+.form-group textarea:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+/* ── Star rating input ─────────────────────────────────────────────────── */
+.star-rating {
+    display: inline-flex;
+    flex-direction: row-reverse;
+    gap: 4px;
+}
+
+.star-rating input[type="radio"] { display: none; }
+
+.star-rating label {
+    font-size: 2rem;
+    color: #d1d5db;
+    cursor: pointer;
+    transition: color 0.1s;
+    line-height: 1;
+}
+
+.star-rating input:checked ~ label,
+.star-rating label:hover,
+.star-rating label:hover ~ label {
+    color: #f59e0b;
+}
+
+/* ── Voice recorder panel ──────────────────────────────────────────────── */
+#voicePanel {
+    display: none;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 20px;
+    margin-top: 8px;
+    background: #f9fafb;
+}
+#voicePanel.visible { display: block; }
+
+.recorder-controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+.recorder-controls button {
+    flex: 1;
+    min-width: 90px;
+    padding: 10px 14px;
+    font-size: 14px;
+    font-weight: 600;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.recorder-controls button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+#voiceRecord { background: #10b981; color: white; }
+#voiceRecord:hover:not(:disabled) { background: #059669; }
+#voiceRecord.recording { background: #ef4444; animation: pulse 1.5s infinite; }
+
+#voiceStop { background: #f59e0b; color: white; }
+#voiceStop:hover:not(:disabled) { background: #d97706; }
+
+#voiceSend { background: #3b82f6; color: white; }
+#voiceSend:hover:not(:disabled) { background: #2563eb; }
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+.recorder-timer {
+    font-size: 18px;
+    font-weight: 700;
+    color: #667eea;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    margin-bottom: 8px;
+}
+
+.recorder-visualizer {
+    height: 60px;
+    background: #e5e7eb;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 8px;
+}
+.recorder-visualizer.active { display: flex; }
+.recorder-visualizer .bar {
+    width: 4px;
+    background: linear-gradient(to top, #667eea, #764ba2);
+    border-radius: 2px;
+    transition: height 0.1s ease;
+}
+
+.recorder-status {
+    font-size: 13px;
+    color: #6b7280;
+    text-align: center;
+    min-height: 20px;
+}
+.recorder-status.error { color: #dc2626; }
+.recorder-status.success { color: #059669; }
+
+/* ── Thank-you page ────────────────────────────────────────────────────── */
+.thanks-icon { font-size: 3rem; text-align: center; margin-bottom: 16px; }
+.thanks-title { font-size: 24px; font-weight: 700; color: #111827; text-align: center; margin-bottom: 8px; }
+.thanks-sub { font-size: 15px; color: #6b7280; text-align: center; margin-bottom: 28px; }

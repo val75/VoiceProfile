@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Review {{ profile.name }}</title>
+    <link rel="stylesheet" href="{{ url_for('reviews.static', filename='reviews/css/reviews.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div>
+                <h1>Review {{ profile.name }}</h1>
+                <p>Share your experience working with this person</p>
+            </div>
+            <a href="{{ url_for('reviews.public_profile', profile_id=profile.id) }}" class="btn-secondary">← Back</a>
+        </div>
+
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for msg in messages %}
+                <div class="flash">{{ msg }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="{{ url_for('reviews.new_review', profile_id=profile.id) }}">
+
+            <!-- Your name -->
+            <div class="form-group">
+                <label for="reviewer_name">Your name <span style="font-weight:400;color:#9ca3af">(optional)</span></label>
+                <input type="text" id="reviewer_name" name="reviewer_name" placeholder="Anonymous" maxlength="120">
+            </div>
+
+            <!-- Star rating -->
+            <div class="form-group">
+                <label>Rating</label>
+                <div class="star-rating">
+                    <input type="radio" id="star5" name="rating" value="5">
+                    <label for="star5" title="5 stars">★</label>
+                    <input type="radio" id="star4" name="rating" value="4">
+                    <label for="star4" title="4 stars">★</label>
+                    <input type="radio" id="star3" name="rating" value="3">
+                    <label for="star3" title="3 stars">★</label>
+                    <input type="radio" id="star2" name="rating" value="2">
+                    <label for="star2" title="2 stars">★</label>
+                    <input type="radio" id="star1" name="rating" value="1">
+                    <label for="star1" title="1 star">★</label>
+                </div>
+            </div>
+
+            <!-- Review text -->
+            <div class="form-group">
+                <label for="content">Your review</label>
+                <textarea id="content" name="content" rows="5" placeholder="What was it like working with {{ profile.name }}?" required></textarea>
+            </div>
+
+            <!-- Voice toggle -->
+            <div class="form-group">
+                <button type="button" id="toggleVoice" class="btn-secondary" style="width:100%">
+                    🎙 Record instead of typing
+                </button>
+            </div>
+
+            <!-- Voice recorder panel -->
+            <div id="voicePanel">
+                <div class="recorder-timer" id="voiceTimer">00:00</div>
+                <div class="recorder-visualizer" id="voiceVisualizer">
+                    <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+                    <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+                    <div class="bar"></div><div class="bar"></div>
+                </div>
+                <div class="recorder-controls">
+                    <button type="button" id="voiceRecord">
+                        <span>🎙</span>
+                        <span id="voiceRecordText">Record</span>
+                    </button>
+                    <button type="button" id="voiceStop" disabled>⏹ Stop</button>
+                    <button type="button" id="voiceSend" disabled>📤 Use this</button>
+                </div>
+                <p class="recorder-status" id="voiceStatus">Press Record to start</p>
+            </div>
+
+            <!-- Hidden raw transcript for storage -->
+            <input type="hidden" id="transcript" name="transcript">
+
+            <button type="submit" class="btn-primary" style="width:100%;padding:14px;font-size:16px;margin-top:8px">
+                Submit Review
+            </button>
+        </form>
+    </div>
+
+    <script src="{{ url_for('reviews.static', filename='reviews/js/audioVisualizer.js') }}"></script>
+    <script src="{{ url_for('reviews.static', filename='reviews/js/voiceRecorder.js') }}"></script>
+    <script>
+    (function() {
+      const toggleBtn = document.getElementById('toggleVoice');
+      const voicePanel = document.getElementById('voicePanel');
+      const contentArea = document.getElementById('content');
+      const transcriptInput = document.getElementById('transcript');
+
+      toggleBtn.addEventListener('click', function() {
+        const visible = voicePanel.classList.toggle('visible');
+        toggleBtn.textContent = visible ? '✕ Hide recorder' : '🎙 Record instead of typing';
+      });
+
+      const recorder = new window.VoiceRecorder(
+        {
+          recordBtn:  document.getElementById('voiceRecord'),
+          stopBtn:    document.getElementById('voiceStop'),
+          sendBtn:    document.getElementById('voiceSend'),
+          recordText: document.getElementById('voiceRecordText'),
+          visualizer: document.getElementById('voiceVisualizer'),
+          bars:       document.querySelectorAll('#voiceVisualizer .bar'),
+          status:     document.getElementById('voiceStatus'),
+          timer:      document.getElementById('voiceTimer'),
+        },
+        {
+          onSuccess: function(data) {
+            if (data.text) {
+              contentArea.value = data.text;
+              transcriptInput.value = data.text;
+              voicePanel.classList.remove('visible');
+              toggleBtn.textContent = '🎙 Record instead of typing';
+              contentArea.focus();
+              document.getElementById('voiceStatus').textContent = 'Transcript copied to review — edit if needed.';
+              document.getElementById('voiceStatus').className = 'recorder-status success';
+            }
+          }
+        }
+      );
+    })();
+    </script>
+</body>
+</html>

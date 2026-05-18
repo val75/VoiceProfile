@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enter Code — VoiceProfile</title>
+    <link rel="stylesheet" href="{{ url_for('auth.static', filename='auth/css/verify.css') }}">
+</head>
+<body>
+    <div class="card">
+        <h1>Check your phone</h1>
+        <p class="subtitle">
+            We sent a 6-digit code to<br>
+            <span class="phone-display">{{ phone }}</span>
+        </p>
+
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for msg in messages %}
+                    <div class="flash">{{ msg }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="{{ url_for('auth.verify') }}">
+            <label for="code">Your code</label>
+            <input
+                type="text"
+                id="code"
+                name="code"
+                placeholder="000000"
+                inputmode="numeric"
+                autocomplete="one-time-code"
+                maxlength="6"
+                pattern="[0-9]{6}"
+                autofocus
+                required
+            >
+            <p class="hint">The code expires in 5 minutes.</p>
+            <button type="submit">Verify</button>
+        </form>
+
+        <a href="{{ url_for('auth.login') }}" class="back-link">Use a different number</a>
+    </div>
+</body>
+</html>

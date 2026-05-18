@@ -1,107 +1,165 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Voice Profile Builder</title>
-  <style>
-    body {
-      font-family: sans-serif;
-      background: #f5f6fa;
-      margin: 0;
-      padding: 1rem;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-    h1 { color: #333; }
-    button {
-      background: #007bff;
-      color: white;
-      border: none;
-      padding: 0.75rem 1.25rem;
-      border-radius: 6px;
-      font-size: 1rem;
-      cursor: pointer;
-    }
-    button:disabled {
-      background: #ccc;
-    }
-    #output {
-      margin-top: 1rem;
-      width: 90%;
-      max-width: 600px;
-      background: #fff;
-      border-radius: 8px;
-      padding: 1rem;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-    }
-    pre {
-      white-space: pre-wrap;
-      word-wrap: break-word;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VoiceProfile</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            padding: 20px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 20px;
+            padding: 48px 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 420px;
+            width: 100%;
+            text-align: center;
+        }
+
+        .icon {
+            font-size: 56px;
+            margin-bottom: 16px;
+        }
+
+        h1 {
+            font-size: 28px;
+            color: #1f2937;
+            margin-bottom: 12px;
+        }
+
+        .tagline {
+            color: #6b7280;
+            font-size: 16px;
+            line-height: 1.6;
+            margin-bottom: 40px;
+        }
+
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 16px;
+            font-size: 18px;
+            font-weight: 700;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: opacity 0.2s, transform 0.1s;
+        }
+
+        .btn:active {
+            opacity: 0.9;
+            transform: scale(0.98);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            margin-bottom: 12px;
+        }
+
+        .btn-secondary {
+            background: #f3f4f6;
+            color: #374151;
+        }
+
+        .divider {
+            border: none;
+            border-top: 1px solid #e5e7eb;
+            margin: 32px 0;
+        }
+
+        .how-it-works {
+            text-align: left;
+        }
+
+        .how-it-works h2 {
+            font-size: 14px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #9ca3af;
+            margin-bottom: 16px;
+        }
+
+        .step {
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+            margin-bottom: 14px;
+        }
+
+        .step-num {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-size: 13px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .step-text {
+            color: #374151;
+            font-size: 15px;
+            line-height: 1.5;
+            padding-top: 4px;
+        }
+    </style>
 </head>
 <body>
-  <h1>🎤 Voice Profile Builder</h1>
-  <p>Press record, describe your job or skills, then stop to upload.</p>
+    <div class="card">
+        <div class="icon">🎤</div>
+        <h1>VoiceProfile</h1>
+        <p class="tagline">
+            Create your work profile by speaking — no typing needed.
+            Share it with a QR code so others can find you.
+        </p>
 
-  <button id="recordBtn">Start Recording</button>
-  <button id="stopBtn" disabled>Stop & Upload</button>
+        {% if session.get('profile_id') %}
+            <a href="{{ url_for('profiles.view_profile', profile_id=session['profile_id']) }}" class="btn btn-primary">
+                Continue to my profile
+            </a>
+            <form method="POST" action="{{ url_for('auth.logout') }}" style="margin:0">
+                <button type="submit" class="btn btn-secondary">Sign out</button>
+            </form>
+        {% else %}
+            <a href="{{ url_for('auth.login') }}" class="btn btn-primary">
+                Create my profile
+            </a>
+        {% endif %}
 
-  <div id="output"></div>
+        <hr class="divider">
 
-  <script>
-    let mediaRecorder;
-    let audioChunks = [];
-
-    const recordBtn = document.getElementById("recordBtn");
-    const stopBtn = document.getElementById("stopBtn");
-    const output = document.getElementById("output");
-
-    recordBtn.onclick = async () => {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorder = new MediaRecorder(stream);
-      audioChunks = [];
-
-      mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-      mediaRecorder.onstop = uploadAudio;
-
-      mediaRecorder.start();
-      recordBtn.disabled = true;
-      stopBtn.disabled = false;
-      output.innerHTML = "<p>Recording... 🎙️</p>";
-    };
-
-    stopBtn.onclick = () => {
-      mediaRecorder.stop();
-      recordBtn.disabled = false;
-      stopBtn.disabled = true;
-      output.innerHTML = "<p>Processing...</p>";
-    };
-
-    async function uploadAudio() {
-      const blob = new Blob(audioChunks, { type: "audio/webm" });
-      const formData = new FormData();
-      formData.append("file", blob, "recording.webm");
-
-      try {
-        const response = await fetch("/voice/upload", { method: "POST", body: formData });
-        const data = await response.json();
-        output.innerHTML = `<h3>Transcript:</h3><pre>${data.transcript}</pre>`;
-
-        // Send transcript to NLP parser
-        const nlpResponse = await fetch("/builder/parse", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: data.transcript })
-        });
-        const structured = await nlpResponse.json();
-        output.innerHTML += `<h3>Extracted Data:</h3><pre>${JSON.stringify(structured, null, 2)}</pre>`;
-      } catch (err) {
-        output.innerHTML = `<p style="color:red;">Error: ${err}</p>`;
-      }
-    }
-  </script>
+        <div class="how-it-works">
+            <h2>How it works</h2>
+            <div class="step">
+                <div class="step-num">1</div>
+                <div class="step-text">Enter your phone number and confirm with a code</div>
+            </div>
+            <div class="step">
+                <div class="step-num">2</div>
+                <div class="step-text">Answer a few questions by speaking — we write it down for you</div>
+            </div>
+            <div class="step">
+                <div class="step-num">3</div>
+                <div class="step-text">Share your profile QR code so employers can find and review you</div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

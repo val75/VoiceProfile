@@ -3,10 +3,12 @@ import os
 from flask import Flask, render_template
 from config import Config
 from extensions.database import db, migrate
+from blueprints.auth.routes import auth_bp
 from blueprints.voice_input.routes import voice_input_bp
 from blueprints.profile_builder.routes import profile_builder_bp
 from blueprints.profiles.routes import profiles_bp
 from blueprints.onboarding.routes import onboarding_bp
+from blueprints.reviews.routes import reviews_bp
 
 
 def create_app():
@@ -16,10 +18,12 @@ def create_app():
     db.init_app(myapp)
     migrate.init_app(myapp, db)
 
+    myapp.register_blueprint(auth_bp)
     myapp.register_blueprint(voice_input_bp, url_prefix="/voice")
     myapp.register_blueprint(profile_builder_bp, url_prefix="/builder")
     myapp.register_blueprint(profiles_bp, url_prefix="/profiles")
     myapp.register_blueprint(onboarding_bp, url_prefix="/onboarding")
+    myapp.register_blueprint(reviews_bp, url_prefix="/p")
 
     @myapp.cli.command("init-db")
     def init_db():

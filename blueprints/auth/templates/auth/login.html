@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign In — VoiceProfile</title>
+    <link rel="stylesheet" href="{{ url_for('auth.static', filename='auth/css/login.css') }}">
+</head>
+<body>
+    <div class="card">
+        <h1>Welcome back</h1>
+        <p class="subtitle">Enter your phone number and we'll send you a code to sign in.</p>
+
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for msg in messages %}
+                    <div class="flash">{{ msg }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="{{ url_for('auth.login') }}">
+            <label for="phone">Phone number</label>
+            <input
+                type="tel"
+                id="phone"
+                name="phone"
+                placeholder="+1 555 000 0000"
+                inputmode="tel"
+                autocomplete="tel"
+                autofocus
+                required
+            >
+            <p class="hint">We'll send a 6-digit code to this number.</p>
+            <button type="submit">Send code</button>
+        </form>
+    </div>
+</body>
+</html>

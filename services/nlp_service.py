@@ -78,7 +78,7 @@ def _build_user_prompt(transcripts: dict) -> str:
 
 
 def _parse_json_response(content: str) -> dict:
-    """Parse JSON from LLM response, handling markdown code fences."""
+    """Parse JSON from LLM response, handling markdown code fences and minor syntax errors."""
     content = content.strip()
 
     # Try direct parse first
@@ -94,6 +94,13 @@ def _parse_json_response(content: str) -> dict:
             return json.loads(match.group(1).strip())
         except json.JSONDecodeError:
             pass
+
+    # Try repairing malformed JSON (missing commas, trailing commas, etc.)
+    try:
+        from json_repair import repair_json
+        return json.loads(repair_json(content))
+    except Exception:
+        pass
 
     raise ExtractionError(f"Could not parse JSON from LLM response: {content[:200]}")
 
@@ -133,6 +140,7 @@ def extract_profile_data(transcripts: dict) -> dict:
                 ],
                 temperature=0.1,
                 timeout=timeout,
+                response_format={"type": "json_object"},
             )
 
             content = response.choices[0].message.content

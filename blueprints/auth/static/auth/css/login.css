@@ -41,20 +41,39 @@ label {
     font-size: 15px;
 }
 
-input[type="tel"] {
-    width: 100%;
-    padding: 16px;
-    font-size: 20px;
+.phone-row {
+    display: flex;
     border: 2px solid #e5e7eb;
     border-radius: 12px;
-    outline: none;
+    overflow: hidden;
     transition: border-color 0.2s;
-    font-family: inherit;
-    letter-spacing: 0.05em;
 }
 
-input[type="tel"]:focus {
+.phone-row:focus-within {
     border-color: #667eea;
+}
+
+.phone-row input[type="tel"] {
+    border: none;
+    outline: none;
+    padding: 16px;
+    font-size: 20px;
+    font-family: inherit;
+    letter-spacing: 0.05em;
+    background: transparent;
+}
+
+#countryCode {
+    width: 72px;
+    text-align: center;
+    border-right: 2px solid #e5e7eb;
+    flex-shrink: 0;
+    color: #6b7280;
+}
+
+#localNumber {
+    flex: 1;
+    min-width: 0;
 }
 
 .hint {

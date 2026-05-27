@@ -19,21 +19,39 @@
             {% endif %}
         {% endwith %}
 
-        <form method="POST" action="{{ url_for('auth.login') }}">
-            <label for="phone">Phone number</label>
-            <input
-                type="tel"
-                id="phone"
-                name="phone"
-                placeholder="+1 555 000 0000"
-                inputmode="tel"
-                autocomplete="tel"
-                autofocus
-                required
-            >
+        <form method="POST" action="{{ url_for('auth.login') }}" id="loginForm">
+            <label>Phone number</label>
+            <div class="phone-row">
+                <input
+                    type="tel"
+                    id="countryCode"
+                    placeholder="+1"
+                    value="+1"
+                    inputmode="tel"
+                    maxlength="5"
+                    autocomplete="tel-country-code"
+                >
+                <input
+                    type="tel"
+                    id="localNumber"
+                    placeholder="555 000 0000"
+                    inputmode="tel"
+                    autocomplete="tel-national"
+                    autofocus
+                    required
+                >
+            </div>
+            <input type="hidden" name="phone" id="phone">
             <p class="hint">We'll send a 6-digit code to this number.</p>
             <button type="submit">Send code</button>
         </form>
+        <script>
+        document.getElementById('loginForm').addEventListener('submit', function () {
+            var cc    = document.getElementById('countryCode').value.trim();
+            var local = document.getElementById('localNumber').value.replace(/\s+/g, '').trim();
+            document.getElementById('phone').value = cc + local;
+        });
+        </script>
     </div>
 </body>
 </html>

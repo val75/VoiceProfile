@@ -289,7 +289,8 @@ def voice_step(profile_id, step):
         "onboarding/record_question.html",
         question_id=step,
         question_text=QUESTIONS[step],
-        transcribe_url=url_for("onboarding.voice_transcribe", profile_id=profile.id, step=step)
+        transcribe_url=url_for("onboarding.voice_transcribe", profile_id=profile.id, step=step),
+        is_last_step=(step == GENERIC_STEPS[-1]),
     )
 
 

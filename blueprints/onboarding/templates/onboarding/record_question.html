@@ -57,6 +57,7 @@
         <!-- Hidden field to pass question_id from backend Flask route to frontend -->
         <input type="hidden" id="questionId" value="{{ question_id }}">
         <input type="hidden" id="transcribeUrl" value="{{ transcribe_url }}">
+        <input type="hidden" id="isLastStep" value="{{ 'true' if is_last_step else 'false' }}">
     </div>
 
     <!-- Scripts loaded in dependency order -->

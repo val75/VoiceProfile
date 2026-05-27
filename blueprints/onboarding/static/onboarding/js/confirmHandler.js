@@ -145,7 +145,18 @@
             }
 
             setConfirmBtnsDisabled(true);
-            statusEl.textContent = 'Saving…';
+
+            const isLastStep = document.getElementById('isLastStep')?.value === 'true';
+            let loadingTimer = null;
+            if (isLastStep) {
+                let dots = 0;
+                loadingTimer = setInterval(() => {
+                    dots = (dots + 1) % 4;
+                    statusEl.textContent = 'Building your profile' + '.'.repeat(dots);
+                }, 400);
+            } else {
+                statusEl.textContent = 'Saving…';
+            }
 
             const payload = { confirmed: true };
             if (isEditing) {
@@ -158,6 +169,7 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
+                clearInterval(loadingTimer);
                 const data = await res.json();
 
                 if (data.next_url) {
@@ -166,6 +178,7 @@
                     statusEl.textContent = 'Saved!';
                 }
             } catch (err) {
+                clearInterval(loadingTimer);
                 statusEl.textContent = 'Network error. Please try again.';
                 setConfirmBtnsDisabled(false);
             }

@@ -1,6 +1,6 @@
 import logging
 
-from flask import render_template, request, redirect, url_for, session, flash
+from flask import render_template, request, redirect, url_for, session, flash, current_app
 
 from . import auth_bp
 from models.profile import WorkerProfile
@@ -33,13 +33,15 @@ def login():
             return render_template("auth/login.html")
 
         try:
-            send_code(phone)
+            code = send_code(phone)
         except OTPError as e:
             logger.error("send_code failed for %s: %s", phone, e)
             flash("Could not send a code. Please try again.")
             return render_template("auth/login.html")
 
         session["pending_phone"] = phone
+        if current_app.debug:
+            session["debug_code"] = code
         return redirect(url_for("auth.verify"))
 
     return render_template("auth/login.html")
@@ -55,7 +57,7 @@ def verify():
         code = request.form.get("code", "").strip()
         if not verify_code(phone, code):
             flash("Invalid or expired code. Please try again.")
-            return render_template("auth/verify.html", phone=phone)
+            return render_template("auth/verify.html", phone=phone, debug_code=None)
 
         # Code is valid — look up or create the profile for this phone.
         profile = WorkerProfile.query.filter_by(phone_number=phone).first()
@@ -69,7 +71,8 @@ def verify():
 
         return redirect(_post_auth_url(profile))
 
-    return render_template("auth/verify.html", phone=phone)
+    debug_code = session.pop("debug_code", None)
+    return render_template("auth/verify.html", phone=phone, debug_code=debug_code)
 
 
 @auth_bp.route("/logout", methods=["POST"])

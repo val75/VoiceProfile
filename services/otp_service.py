@@ -15,13 +15,13 @@ class OTPError(Exception):
     pass
 
 
-def send_code(phone: str) -> None:
-    """Generate a 6-digit OTP and log it to the terminal (stub — no real SMS)."""
+def send_code(phone: str) -> str:
+    """Generate a 6-digit OTP, log it, and return it (caller may surface it in debug mode)."""
     code = str(secrets.randbelow(1_000_000)).zfill(6)
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=_CODE_TTL_MINUTES)
     _pending[phone] = (code, expires_at)
-    # In production this line is replaced by a Twilio Verify API call.
     print(f"[OTP STUB] Code for {phone}: {code}", flush=True)
+    return code
 
 
 def verify_code(phone: str, code: str) -> bool:

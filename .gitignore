@@ -20,3 +20,7 @@ migrations/
 
 # .md files
 *.md
+
+# Python bytecode
+__pycache__/
+*.pyc

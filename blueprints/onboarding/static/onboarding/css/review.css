@@ -90,21 +90,57 @@ textarea.input-full {
   resize: vertical;
 }
 
-/* ── Item rows (skills, roles) ─────────────────────────────────────── */
-.item-row {
+/* ── Work experience cards ─────────────────────────────────────────── */
+.work-card {
+  border: 1.5px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 12px 16px 16px;
+  margin-bottom: 12px;
+  background: #fafafa;
+}
+
+.work-card-header {
   display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 8px;
-  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-bottom: 4px;
 }
 
-.role-row {
-  flex-wrap: wrap;
+.field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
 }
 
-.role-row .input-full {
-  flex: 1 1 100%;
+.field-group {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.field-group > label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #6b7280;
+  margin-bottom: 4px;
+}
+
+.field-group > input,
+.field-group > select {
+  width: 100%;
+}
+
+.field-group-full { grid-column: 1 / -1; }
+
+.duration-input {
+  display: flex;
+  gap: 6px;
+}
+
+.duration-input .f-dur { width: 64px; flex: 0 0 64px; }
+.duration-input .f-unit { flex: 1 1 auto; min-width: 0; }
+
+@media (max-width: 480px) {
+  .field-grid { grid-template-columns: 1fr; }
 }
 
 .btn-remove {

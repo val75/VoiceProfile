@@ -12,9 +12,11 @@ logger = logging.getLogger(__name__)
 
 def _post_auth_url(profile) -> str:
     """Return the URL the user should land on after a successful login."""
-    state = profile.onboarding_state or "name"
+    state = profile.onboarding_state or "intro"
     if state == "completed":
         return url_for("profiles.view_profile", profile_id=profile.id)
+    if state == "intro":
+        return url_for("onboarding.intro", profile_id=profile.id)
     if state in ("name", "name_confirm"):
         return url_for("onboarding.name_step", profile_id=profile.id)
     if state in ("skills", "experience", "availability"):

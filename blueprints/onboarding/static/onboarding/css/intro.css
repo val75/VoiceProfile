@@ -1,0 +1,92 @@
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f3f4f6;
+    color: #111827;
+    line-height: 1.6;
+}
+
+.container {
+    max-width: 520px;
+    margin: 0 auto;
+    padding: 40px 20px 64px;
+}
+
+.card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 32px 28px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+h1 { font-size: 26px; margin: 0 0 12px; }
+
+.lead { color: #4b5563; font-size: 16px; margin: 0 0 28px; }
+
+.outline-heading {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #6b7280;
+    margin: 0 0 12px;
+}
+
+ol.outline {
+    list-style: none;
+    counter-reset: step;
+    margin: 0 0 24px;
+    padding: 0;
+}
+
+ol.outline li {
+    counter-increment: step;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 0;
+    border-bottom: 1px solid #f0f1f3;
+    font-size: 16px;
+}
+
+ol.outline li:last-child { border-bottom: none; }
+
+ol.outline li::before {
+    content: counter(step);
+    flex: 0 0 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: #eef2ff;
+    color: #6366f1;
+    font-weight: 700;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.review-note {
+    background: #f9fafb;
+    border-radius: 10px;
+    padding: 14px 16px;
+    font-size: 14px;
+    color: #4b5563;
+    margin: 0 0 28px;
+}
+
+.btn-begin {
+    display: block;
+    width: 100%;
+    text-align: center;
+    background: #6366f1;
+    color: #fff;
+    font-size: 17px;
+    font-weight: 600;
+    padding: 16px;
+    border-radius: 12px;
+    text-decoration: none;
+}
+
+.btn-begin:active { background: #4f46e5; }

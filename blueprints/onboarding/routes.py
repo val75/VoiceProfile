@@ -13,6 +13,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 ONBOARDING_STEPS = [
+    "intro",
     "name",
     "name_confirm",
     "skills",
@@ -21,10 +22,18 @@ ONBOARDING_STEPS = [
     "review"
 ]
 
+# Short, ordered labels shown on the intro screen so the user knows what's coming.
+INTRO_OUTLINE = [
+    "Your name",
+    "The kinds of work you can do",
+    "How long you've done each — and where",
+    "The days and hours you're available",
+]
+
 QUESTIONS = {
     'name':         "What is your full name?",
-    'skills':       "What skills or types of work are you experienced in?",
-    'experience':   "How many years of experience do you have, and can you describe your work background?",
+    'skills':       "What kinds of work can you do? Name as many as you like — for example painting, driving, warehouse work, or cleaning.",
+    'experience':   "For each kind of work you mentioned, about how long have you done it, and where?",
     'availability': "What days and hours are you available to work?",
 }
 
@@ -122,6 +131,20 @@ def start_onboarding():
 #        "onboarding/name.html",
 #        profile_id=profile.id
 #    )
+
+@onboarding_bp.route("/<int:profile_id>/intro")
+@profile_owner_required
+def intro(profile_id):
+    """Welcome screen: explain the purpose and outline the steps before Q1."""
+    profile = WorkerProfile.query.get_or_404(profile_id)
+
+    return render_template(
+        "onboarding/intro.html",
+        profile=profile,
+        outline=INTRO_OUTLINE,
+        begin_url=url_for("onboarding.name_step", profile_id=profile.id),
+    )
+
 
 @onboarding_bp.route("/<int:profile_id>/name")
 @profile_owner_required
@@ -285,10 +308,19 @@ def voice_step(profile_id, step):
 
     profile = WorkerProfile.query.get_or_404(profile_id)
 
+    # Reference back to the skills answer so the experience question feels
+    # connected and elicits a duration for each kind of work just mentioned.
+    question_hint = None
+    if step == "experience":
+        skills_said = (profile.transcripts or {}).get("skills")
+        if skills_said:
+            question_hint = f'You said: “{skills_said}”'
+
     return render_template(
         "onboarding/record_question.html",
         question_id=step,
         question_text=QUESTIONS[step],
+        question_hint=question_hint,
         transcribe_url=url_for("onboarding.voice_transcribe", profile_id=profile.id, step=step),
         is_last_step=(step == GENERIC_STEPS[-1]),
     )

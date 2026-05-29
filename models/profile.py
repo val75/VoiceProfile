@@ -14,7 +14,7 @@ class WorkerProfile(db.Model):
     phone_number = db.Column(db.String(20), unique=True, index=True)
 
     # System fields
-    onboarding_state = db.Column(db.String(50), default="name")
+    onboarding_state = db.Column(db.String(50), default="intro")
     created_at = db.Column(db.DateTime, server_default=db.func.now())
     updated_at = db.Column(db.DateTime, server_default=db.func.now(), onupdate=db.func.now())
 

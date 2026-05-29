@@ -10,6 +10,9 @@
     <div class="container">
         <!-- Question text is passed from backend -->
         <h1 id="questionText">{{ question_text }}</h1>
+        {% if question_hint %}
+        <p id="questionHint" style="color:#6b7280;font-size:15px;font-style:italic;margin-top:-8px;margin-bottom:16px">{{ question_hint }}</p>
+        {% endif %}
 
         <div class="timer" id="timer">00:00</div>
 

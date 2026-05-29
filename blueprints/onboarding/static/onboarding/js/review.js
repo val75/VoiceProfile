@@ -11,110 +11,108 @@
     const reExtractUrl = window.__reExtractUrl;
 
     /* ── DOM refs ──────────────────────────────────────────────────────── */
-    const skillsList       = document.getElementById('skillsList');
-    const rolesList        = document.getElementById('rolesList');
-    const totalYearsInput  = document.getElementById('totalYears');
+    const workList         = document.getElementById('workList');
     const summaryInput     = document.getElementById('experienceSummary');
     const shiftSelect      = document.getElementById('shiftPreference');
     const notesInput       = document.getElementById('availabilityNotes');
     const dayCheckboxes    = document.getElementById('dayCheckboxes');
     const statusMsg        = document.getElementById('statusMsg');
 
-    /* ── Skill rows ───────────────────────────────────────────────────── */
-    function createSkillRow(skill) {
-        const row = document.createElement('div');
-        row.className = 'item-row';
+    /* ── Work experience rows ─────────────────────────────────────────── */
+    const DURATION_UNITS = ['years', 'months', 'weeks'];
 
-        const nameInput = document.createElement('input');
-        nameInput.type = 'text';
-        nameInput.placeholder = 'Skill name';
-        nameInput.value = skill.name || '';
-        nameInput.className = 'input-med';
+    function fieldGroup(labelText, control, extraClass) {
+        const group = document.createElement('div');
+        group.className = 'field-group' + (extraClass ? ' ' + extraClass : '');
+        const label = document.createElement('label');
+        label.textContent = labelText;
+        group.append(label, control);
+        return group;
+    }
+
+    function createWorkRow(item) {
+        const card = document.createElement('div');
+        card.className = 'work-card';
+
+        const typeInput = document.createElement('input');
+        typeInput.type = 'text';
+        typeInput.className = 'f-type';
+        typeInput.placeholder = 'e.g. Auto mechanic';
+        typeInput.value = item.work_type || '';
 
         const catSelect = document.createElement('select');
-        catSelect.className = 'input-sm';
-        catSelect.innerHTML = '<option value="">Category</option>' +
+        catSelect.className = 'f-cat';
+        catSelect.innerHTML = '<option value="">Select…</option>' +
             CATEGORIES.map(c =>
-                `<option value="${c}"${c === skill.category ? ' selected' : ''}>${c.replace('_', ' ')}</option>`
+                `<option value="${c}"${c === item.category ? ' selected' : ''}>${c.replace('_', ' ')}</option>`
             ).join('');
 
-        const yearsInput = document.createElement('input');
-        yearsInput.type = 'number';
-        yearsInput.placeholder = 'Yrs';
-        yearsInput.min = '0';
-        yearsInput.max = '99';
-        yearsInput.value = skill.years_experience ?? '';
-        yearsInput.className = 'input-xs';
+        // Duration: amount + unit. Falls back to legacy `years` data.
+        const durInput = document.createElement('input');
+        durInput.type = 'number';
+        durInput.className = 'f-dur';
+        durInput.min = '0';
+        durInput.placeholder = '0';
+        durInput.value = (item.duration ?? item.years) ?? '';
 
-        const removeBtn = document.createElement('button');
-        removeBtn.type = 'button';
-        removeBtn.textContent = '\u00d7';
-        removeBtn.className = 'btn-remove';
-        removeBtn.addEventListener('click', () => row.remove());
+        const unitSelect = document.createElement('select');
+        unitSelect.className = 'f-unit';
+        const unit = item.duration_unit || 'years';
+        unitSelect.innerHTML = DURATION_UNITS
+            .map(u => `<option value="${u}"${u === unit ? ' selected' : ''}>${u}</option>`)
+            .join('');
 
-        row.append(nameInput, catSelect, yearsInput, removeBtn);
-        return row;
-    }
-
-    function addSkill(skill) {
-        skillsList.appendChild(createSkillRow(skill || {}));
-    }
-
-    /* ── Role rows ────────────────────────────────────────────────────── */
-    function createRoleRow(role) {
-        const row = document.createElement('div');
-        row.className = 'item-row role-row';
-
-        const titleInput = document.createElement('input');
-        titleInput.type = 'text';
-        titleInput.placeholder = 'Job title';
-        titleInput.value = role.title || '';
-        titleInput.className = 'input-med';
+        const durWrap = document.createElement('div');
+        durWrap.className = 'duration-input';
+        durWrap.append(durInput, unitSelect);
 
         const employerInput = document.createElement('input');
         employerInput.type = 'text';
-        employerInput.placeholder = 'Employer';
-        employerInput.value = role.employer || '';
-        employerInput.className = 'input-med';
+        employerInput.className = 'f-emp';
+        employerInput.placeholder = "e.g. Joe's Garage";
+        employerInput.value = item.employer || '';
 
-        const durationInput = document.createElement('input');
-        durationInput.type = 'text';
-        durationInput.placeholder = 'Duration';
-        durationInput.value = role.duration || '';
-        durationInput.className = 'input-sm';
-
-        const descInput = document.createElement('input');
-        descInput.type = 'text';
-        descInput.placeholder = 'Description';
-        descInput.value = role.description || '';
-        descInput.className = 'input-full';
+        const contextInput = document.createElement('input');
+        contextInput.type = 'text';
+        contextInput.className = 'f-ctx';
+        contextInput.placeholder = 'e.g. Fixing brakes and engines';
+        contextInput.value = item.context || '';
 
         const removeBtn = document.createElement('button');
         removeBtn.type = 'button';
-        removeBtn.textContent = '\u00d7';
+        removeBtn.textContent = '×';
         removeBtn.className = 'btn-remove';
-        removeBtn.addEventListener('click', () => row.remove());
+        removeBtn.setAttribute('aria-label', 'Remove this work entry');
+        removeBtn.addEventListener('click', () => card.remove());
 
-        row.append(titleInput, employerInput, durationInput, descInput, removeBtn);
-        return row;
+        const header = document.createElement('div');
+        header.className = 'work-card-header';
+        header.append(removeBtn);
+
+        const grid = document.createElement('div');
+        grid.className = 'field-grid';
+        grid.append(
+            fieldGroup('Type of work', typeInput),
+            fieldGroup('Category', catSelect),
+            fieldGroup('How long', durWrap),
+            fieldGroup('Employer or place', employerInput),
+            fieldGroup('What they did', contextInput, 'field-group-full'),
+        );
+
+        card.append(header, grid);
+        return card;
     }
 
-    function addRole(role) {
-        rolesList.appendChild(createRoleRow(role || {}));
+    function addWork(item) {
+        workList.appendChild(createWorkRow(item || {}));
     }
 
     /* ── Populate form from data ──────────────────────────────────────── */
     function populate(d) {
-        // Skills
-        skillsList.innerHTML = '';
-        (d.skills || []).forEach(s => addSkill(s));
+        summaryInput.value = d.summary || '';
 
-        // Experience
-        const exp = d.experience || {};
-        totalYearsInput.value = exp.total_years ?? '';
-        summaryInput.value = exp.summary || '';
-        rolesList.innerHTML = '';
-        (exp.roles || []).forEach(r => addRole(r));
+        workList.innerHTML = '';
+        (d.work_experience || []).forEach(w => addWork(w));
 
         // Availability
         const avail = d.availability || {};
@@ -128,33 +126,22 @@
 
     /* ── Collect form into JSON ───────────────────────────────────────── */
     function collect() {
-        const skills = [];
-        skillsList.querySelectorAll('.item-row').forEach(row => {
-            const inputs = row.querySelectorAll('input, select');
-            const name = inputs[0].value.trim();
-            if (!name) return;
-            const skill = { name, category: inputs[1].value };
-            const yrs = parseInt(inputs[2].value, 10);
-            if (!isNaN(yrs)) skill.years_experience = yrs;
-            skills.push(skill);
+        const work_experience = [];
+        workList.querySelectorAll('.work-card').forEach(card => {
+            const workType = card.querySelector('.f-type').value.trim();
+            if (!workType) return;
+            const item = { work_type: workType, category: card.querySelector('.f-cat').value };
+            const dur = parseInt(card.querySelector('.f-dur').value, 10);
+            if (!isNaN(dur)) {
+                item.duration = dur;
+                item.duration_unit = card.querySelector('.f-unit').value || 'years';
+            }
+            const employer = card.querySelector('.f-emp').value.trim();
+            if (employer) item.employer = employer;
+            const context = card.querySelector('.f-ctx').value.trim();
+            if (context) item.context = context;
+            work_experience.push(item);
         });
-
-        const roles = [];
-        rolesList.querySelectorAll('.item-row').forEach(row => {
-            const inputs = row.querySelectorAll('input');
-            const title = inputs[0].value.trim();
-            if (!title) return;
-            roles.push({
-                title,
-                employer: inputs[1].value.trim(),
-                duration: inputs[2].value.trim(),
-                description: inputs[3].value.trim(),
-            });
-        });
-
-        const totalYears = parseInt(totalYearsInput.value, 10);
-        const experience = { roles, summary: summaryInput.value.trim() };
-        if (!isNaN(totalYears)) experience.total_years = totalYears;
 
         const days = [];
         dayCheckboxes.querySelectorAll('input:checked').forEach(cb => days.push(cb.value));
@@ -163,7 +150,10 @@
         if (shiftSelect.value) availability.shift_preference = shiftSelect.value;
         if (notesInput.value.trim()) availability.notes = notesInput.value.trim();
 
-        return { skills, experience, availability };
+        const result = { work_experience, availability };
+        const summary = summaryInput.value.trim();
+        if (summary) result.summary = summary;
+        return result;
     }
 
     /* ── Save handler ─────────────────────────────────────────────────── */
@@ -220,8 +210,7 @@
     }
 
     /* ── Wire up events ───────────────────────────────────────────────── */
-    document.getElementById('btnAddSkill').addEventListener('click', () => addSkill());
-    document.getElementById('btnAddRole').addEventListener('click', () => addRole());
+    document.getElementById('btnAddWork').addEventListener('click', () => addWork());
     document.getElementById('btnSave').addEventListener('click', save);
     document.getElementById('btnReExtractBottom').addEventListener('click', reExtract);
 

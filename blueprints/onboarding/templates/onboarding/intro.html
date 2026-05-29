@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Your Job Profile</title>
+    <link rel="stylesheet" href="{{ url_for('onboarding.static', filename='onboarding/css/intro.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <h1>Let's create your job profile</h1>
+            <p class="lead">
+                We'll build your online worker profile by voice — just answer a few
+                short questions out loud. It takes about two minutes.
+            </p>
+
+            <p class="outline-heading">Here's what we'll cover</p>
+            <ol class="outline">
+                {% for item in outline %}
+                <li>{{ item }}</li>
+                {% endfor %}
+            </ol>
+
+            <p class="review-note">
+                At the end you'll see everything we captured and can fix or add
+                anything before saving.
+            </p>
+
+            <a href="{{ begin_url }}" class="btn-begin">Let's begin →</a>
+        </div>
+    </div>
+</body>
+</html>

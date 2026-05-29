@@ -15,7 +15,12 @@
                 <h1>{{ profile.name }}</h1>
                 <p>Worker Profile</p>
             </div>
-            <a href="{{ edit_url }}" class="btn-edit">✏ Edit Profile</a>
+            <div class="header-actions">
+                <a href="{{ edit_url }}" class="btn-edit">✏ Edit Profile</a>
+                <form action="{{ url_for('auth.logout') }}" method="post" class="signout-form">
+                    <button type="submit" class="btn-signout">Sign out</button>
+                </form>
+            </div>
         </div>
 
         <!-- QR code sharing block -->
@@ -34,46 +39,31 @@
             </div>
         </div>
 
-        <!-- Skills -->
+        <!-- Skills & Experience -->
         <div class="section">
-            <h2>Skills</h2>
-            {% if d.skills %}
-            <div class="skills-list">
-                {% for skill in d.skills %}
-                <div class="skill-tag">
-                    {{ skill.name }}
-                    {% if skill.years_experience %}
-                    <span class="years">{{ skill.years_experience }}y</span>
-                    {% endif %}
-                </div>
-                {% endfor %}
-            </div>
-            {% else %}
-            <p class="empty">No skills recorded</p>
+            <h2>Skills &amp; Experience</h2>
+            {% if d.summary %}
+            <p class="exp-summary">{{ d.summary }}</p>
             {% endif %}
-        </div>
-
-        <!-- Experience -->
-        <div class="section">
-            <h2>Experience</h2>
-            {% set exp = d.experience or {} %}
-            {% if exp.summary %}
-            <p class="exp-summary">{{ exp.summary }}</p>
-            {% endif %}
-            {% if exp.roles %}
-            {% for role in exp.roles %}
+            {% if d.work_experience %}
+            {% for item in d.work_experience %}
             <div class="role-item">
-                <div class="role-title">{{ role.title }}</div>
-                <div class="role-meta">
-                    {% if role.employer %}{{ role.employer }}{% endif %}
-                    {% if role.duration %} · {{ role.duration }}{% endif %}
+                <div class="role-title">
+                    {{ item.work_type }}
+                    {% set dur = item.duration or item.years %}
+                    {% set unit = item.duration_unit or 'years' %}
+                    {% if dur %}<span class="years">{{ dur }} {{ unit if dur != 1 else unit[:-1] }}</span>{% endif %}
                 </div>
-                {% if role.description %}
-                <div class="role-desc">{{ role.description }}</div>
+                <div class="role-meta">
+                    {% if item.category %}{{ item.category | replace('_', ' ') | capitalize }}{% endif %}
+                    {% if item.employer %} · {{ item.employer }}{% endif %}
+                </div>
+                {% if item.context %}
+                <div class="role-desc">{{ item.context }}</div>
                 {% endif %}
             </div>
             {% endfor %}
-            {% elif not exp.summary %}
+            {% elif not d.summary %}
             <p class="empty">No experience recorded</p>
             {% endif %}
         </div>

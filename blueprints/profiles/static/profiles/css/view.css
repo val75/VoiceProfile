@@ -43,6 +43,29 @@ body {
 
 .btn-edit:hover { background: #4f46e5; }
 
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.signout-form { margin: 0; }
+
+.btn-signout {
+    padding: 10px 16px;
+    background: transparent;
+    color: #6b7280;
+    border: 1.5px solid #d1d5db;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    font-family: inherit;
+}
+
+.btn-signout:hover { background: #f3f4f6; color: #374151; }
+
 .section {
     margin-bottom: 24px;
     padding-bottom: 24px;

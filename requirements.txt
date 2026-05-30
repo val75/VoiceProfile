@@ -9,4 +9,5 @@ whisper       # optional; heavy - only if you can install it
 openai        # optional - for LLM fallback
 vosk          # optional fallback STT
 qrcode[pil]   # QR code generation for profile sharing
+Pillow        # profile photo processing (resize, EXIF orientation)
 json-repair   # tolerate malformed JSON from LLM responses

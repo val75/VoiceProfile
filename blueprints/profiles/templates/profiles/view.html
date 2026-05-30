@@ -10,10 +10,29 @@
     <div class="container">
         {% set d = profile.profile_data or {} %}
 
+        {% set ts = ((profile.updated_at or profile.created_at).timestamp() | int) if (profile.updated_at or profile.created_at) else 0 %}
         <div class="header">
-            <div>
-                <h1>{{ profile.name }}</h1>
-                <p>Worker Profile</p>
+            <div class="header-identity">
+                <div class="avatar-wrap">
+                    {% if profile.photo_mime %}
+                    <img id="avatarImg" class="avatar"
+                         src="{{ url_for('profiles.photo', profile_id=profile.id) }}?v={{ ts }}"
+                         alt="Profile photo">
+                    {% else %}
+                    <img id="avatarImg" class="avatar" alt="Profile photo" style="display:none">
+                    {% endif %}
+                    <span id="avatarPlaceholder" class="avatar avatar-placeholder"
+                          {% if profile.photo_mime %}style="display:none"{% endif %}>{{ profile.name[:1] | upper if profile.name else '?' }}</span>
+                    <button type="button" id="btnChangePhoto" class="avatar-edit" aria-label="Change profile photo">
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true">
+                            <path d="M9 3 7.2 5H4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3.2L15 3H9zm3 5a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/>
+                        </svg>
+                    </button>
+                </div>
+                <div>
+                    <h1>{{ profile.name }}</h1>
+                    <p>Worker Profile</p>
+                </div>
             </div>
             <div class="header-actions">
                 <a href="{{ edit_url }}" class="btn-edit">✏ Edit Profile</a>
@@ -22,6 +41,8 @@
                 </form>
             </div>
         </div>
+
+        <input type="file" id="photoInput" accept="image/*" hidden>
 
         <!-- QR code sharing block -->
         <div class="section" style="display:flex;align-items:center;gap:24px;flex-wrap:wrap">
@@ -112,5 +133,11 @@
         </div>
 
     </div>
+
+    <script>
+        window.__photoUploadUrl = "{{ url_for('profiles.upload_photo', profile_id=profile.id) }}";
+        window.__photoUrl = "{{ url_for('profiles.photo', profile_id=profile.id) }}";
+    </script>
+    <script src="{{ url_for('profiles.static', filename='profiles/js/photo.js') }}"></script>
 </body>
 </html>

@@ -22,4 +22,8 @@ class WorkerProfile(db.Model):
     profile_data = db.Column(JSONB)
     transcripts = db.Column(JSONB)
 
+    # Profile photo (resized JPEG). Deferred so the bytes load only when served.
+    photo = db.deferred(db.Column(db.LargeBinary))
+    photo_mime = db.Column(db.String(50))
+
 

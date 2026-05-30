@@ -18,10 +18,20 @@
             {% endif %}
         {% endwith %}
 
+        {% set ts = ((profile.updated_at or profile.created_at).timestamp() | int) if (profile.updated_at or profile.created_at) else 0 %}
         <div class="header">
-            <div>
-                <h1>{{ profile.name }}</h1>
-                <p>Worker Profile</p>
+            <div class="header-identity">
+                <div class="avatar-wrap">
+                    {% if profile.photo_mime %}
+                    <img class="avatar" src="{{ url_for('profiles.photo', profile_id=profile.id) }}?v={{ ts }}" alt="{{ profile.name }}">
+                    {% else %}
+                    <span class="avatar avatar-placeholder">{{ profile.name[:1] | upper if profile.name else '?' }}</span>
+                    {% endif %}
+                </div>
+                <div>
+                    <h1>{{ profile.name }}</h1>
+                    <p>Worker Profile</p>
+                </div>
             </div>
             <a href="{{ url_for('reviews.new_review', profile_id=profile.id) }}" class="btn-primary">
                 ✏ Write a Review

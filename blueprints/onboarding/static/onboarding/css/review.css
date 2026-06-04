@@ -206,33 +206,39 @@ textarea.input-full {
   font-size: 13px;
 }
 
-/* ── Day checkboxes ────────────────────────────────────────────────── */
-.day-checkboxes {
+/* ── Schedule rows (per-day day + start/end times) ─────────────────── */
+.schedule-rows {
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.schedule-row {
+  display: flex;
+  align-items: center;
   gap: 8px;
   flex-wrap: wrap;
 }
 
-.day-label {
-  display: flex;
+.day-toggle {
+  display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  min-width: 90px;
   font-size: 14px;
   color: #374151;
   cursor: pointer;
-  padding: 6px 10px;
-  border: 1.5px solid #d1d5db;
-  border-radius: 8px;
-  transition: border-color 0.15s, background 0.15s;
 }
 
-.day-label:has(input:checked) {
-  border-color: #667eea;
-  background: #eef2ff;
+.schedule-row input[type="time"] {
+  font-size: 14px;
+  padding: 6px 8px;
+  width: auto;
 }
 
-.day-label input {
-  display: none;
+.schedule-sep {
+  color: #6b7280;
+  font-size: 13px;
 }
 
 /* ── Actions ───────────────────────────────────────────────────────── */
@@ -240,6 +246,37 @@ textarea.input-full {
   display: flex;
   gap: 12px;
   margin-top: 24px;
+}
+
+/* ── Clarification banner + field-missing marks ────────────────────── */
+.clarify-banner {
+  background: #fef3c7;
+  border: 1.5px solid #fbbf24;
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 20px;
+}
+
+.clarify-banner p {
+  color: #92400e;
+  font-size: 14px;
+  margin: 0;
+}
+
+.clarify-banner .btn {
+  margin-top: 10px;
+}
+
+.field-missing,
+.field-missing:focus {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.15);
+}
+
+.section.field-missing {
+  border-left: 3px solid #ef4444;
+  padding-left: 12px;
+  box-shadow: none;
 }
 
 /* ── Error banner ──────────────────────────────────────────────────── */

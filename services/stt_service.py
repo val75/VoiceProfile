@@ -36,7 +36,7 @@ def transcribe_audio(file_storage):
             whisper_url,
             files=files,
             headers=headers,
-            timeout=60,
+            timeout=180,
         )
     except requests.RequestException as e:
         raise SpeechToTextError("Whisper service unreachable") from e

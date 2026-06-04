@@ -141,6 +141,10 @@ button:disabled {
   font-variant-numeric: tabular-nums;
 }
 
+.timer.near-limit {
+  color: #dc2626;
+}
+
 .visualizer {
   height: 80px;
   background: #f3f4f6;

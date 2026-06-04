@@ -18,6 +18,12 @@
         </div>
         {% endif %}
 
+        <!-- Clarification banner — populated by review.js when gaps are detected -->
+        <div id="clarifyBanner" class="clarify-banner" style="display:none">
+            <p id="clarifyMessage"></p>
+            <a id="reRecordLink" class="btn btn-outline btn-small" style="display:none" href="#">Re-record story</a>
+        </div>
+
         <!-- Skills & Experience Section -->
         <section class="section">
             <h2>Skills &amp; Experience</h2>
@@ -30,24 +36,25 @@
         </section>
 
         <!-- Availability Section -->
-        <section class="section">
+        <section class="section" id="availabilitySection">
             <h2>Availability</h2>
             <div class="field-row">
-                <label>Days Available</label>
-                <div class="day-checkboxes" id="dayCheckboxes">
-                    <label class="day-label"><input type="checkbox" value="monday"> Mon</label>
-                    <label class="day-label"><input type="checkbox" value="tuesday"> Tue</label>
-                    <label class="day-label"><input type="checkbox" value="wednesday"> Wed</label>
-                    <label class="day-label"><input type="checkbox" value="thursday"> Thu</label>
-                    <label class="day-label"><input type="checkbox" value="friday"> Fri</label>
-                    <label class="day-label"><input type="checkbox" value="saturday"> Sat</label>
-                    <label class="day-label"><input type="checkbox" value="sunday"> Sun</label>
+                <label>Days &amp; hours</label>
+                <div class="schedule-rows" id="scheduleRows">
+                    {% for d in ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'] %}
+                    <div class="schedule-row" data-day="{{ d }}">
+                        <label class="day-toggle"><input type="checkbox" data-day="{{ d }}"> {{ d[:3] | capitalize }}</label>
+                        <input type="time" class="schedule-start" data-day="{{ d }}" aria-label="{{ d }} start time">
+                        <span class="schedule-sep">to</span>
+                        <input type="time" class="schedule-end" data-day="{{ d }}" aria-label="{{ d }} end time">
+                    </div>
+                    {% endfor %}
                 </div>
             </div>
             <div class="field-row">
-                <label for="shiftPreference">Shift Preference</label>
+                <label for="shiftPreference">Shift preference (if no specific hours)</label>
                 <select id="shiftPreference" class="input-sm">
-                    <option value="">-- Select --</option>
+                    <option value="">-- None --</option>
                     <option value="morning">Morning</option>
                     <option value="afternoon">Afternoon</option>
                     <option value="evening">Evening</option>
@@ -76,6 +83,7 @@
         window.__profileId = {{ profile.id }};
         window.__reviewUrl = "{{ url_for('onboarding.save_review', profile_id=profile.id) }}";
         window.__reExtractUrl = "{{ url_for('onboarding.re_extract', profile_id=profile.id) }}";
+        window.__storyUrl = "{{ url_for('onboarding.voice_step', profile_id=profile.id, step='story') }}";
     </script>
     <script src="{{ url_for('onboarding.static', filename='onboarding/js/review.js') }}"></script>
 </body>

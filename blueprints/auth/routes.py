@@ -19,8 +19,12 @@ def _post_auth_url(profile) -> str:
         return url_for("onboarding.intro", profile_id=profile.id)
     if state in ("name", "name_confirm"):
         return url_for("onboarding.name_step", profile_id=profile.id)
-    if state in ("skills", "experience", "availability"):
+    if state in ("story", "availability"):
         return url_for("onboarding.voice_step", profile_id=profile.id, step=state)
+    if state in ("skills", "experience"):
+        # Legacy states from the prior multi-question flow — send them to
+        # the new freeform story step to re-record.
+        return url_for("onboarding.voice_step", profile_id=profile.id, step="story")
     if state == "review":
         return url_for("onboarding.review_step", profile_id=profile.id)
     return url_for("onboarding.name_step", profile_id=profile.id)

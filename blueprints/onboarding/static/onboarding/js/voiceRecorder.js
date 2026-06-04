@@ -35,6 +35,26 @@
     }
 
     // ------------------------------------------------------------------
+    // Optional hard cap on recording length. Returns a positive integer
+    // (seconds) or null if no cap is in effect. Constructor option wins,
+    // then a hidden #maxSeconds field on the page.
+    // ------------------------------------------------------------------
+    getMaxSeconds() {
+      const fromOption = parseInt(this.options.maxSeconds, 10);
+      if (Number.isFinite(fromOption) && fromOption > 0) {
+        return fromOption;
+      }
+      const el = document.getElementById('maxSeconds');
+      if (el && el.value) {
+        const fromField = parseInt(el.value, 10);
+        if (Number.isFinite(fromField) && fromField > 0) {
+          return fromField;
+        }
+      }
+      return null;
+    }
+
+    // ------------------------------------------------------------------
     // Resolve the transcribe URL at send-time (so the hidden field is
     // guaranteed to exist in the DOM when we read it).
     // ------------------------------------------------------------------
@@ -68,10 +88,22 @@
       const seconds = elapsed % 60;
       this.elements.timer.textContent =
         `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
+      const max = this.maxSeconds;
+      if (max) {
+        if (elapsed >= max - 30) {
+          this.elements.timer.classList.add('near-limit');
+        }
+        if (elapsed >= max) {
+          this.stopRecording();
+        }
+      }
     }
 
     startTimer() {
       this.recordingStartTime = Date.now();
+      this.maxSeconds = this.getMaxSeconds();   // cache per recording
+      this.elements.timer.classList.remove('near-limit');
       this.updateTimer();
       this.timerInterval = setInterval(() => this.updateTimer(), 1000);
     }
@@ -82,6 +114,7 @@
         this.timerInterval = null;
       }
       this.recordingStartTime = null;
+      this.elements.timer.classList.remove('near-limit');
     }
 
     async getAudioStream() {

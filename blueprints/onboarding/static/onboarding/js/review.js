@@ -9,14 +9,17 @@
     const data = window.__profileData || {};
     const reviewUrl = window.__reviewUrl;
     const reExtractUrl = window.__reExtractUrl;
+    const storyUrl = window.__storyUrl;
 
     /* ── DOM refs ──────────────────────────────────────────────────────── */
     const workList         = document.getElementById('workList');
     const summaryInput     = document.getElementById('experienceSummary');
     const shiftSelect      = document.getElementById('shiftPreference');
     const notesInput       = document.getElementById('availabilityNotes');
-    const dayCheckboxes    = document.getElementById('dayCheckboxes');
+    const scheduleRows     = document.getElementById('scheduleRows');
     const statusMsg        = document.getElementById('statusMsg');
+
+    const SCHEDULE_DAYS = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
 
     /* ── Work experience rows ─────────────────────────────────────────── */
     const DURATION_UNITS = ['years', 'months', 'weeks'];
@@ -114,15 +117,136 @@
         workList.innerHTML = '';
         (d.work_experience || []).forEach(w => addWork(w));
 
-        // Availability
+        // Availability — read schedule, falling back to legacy days[] for old profiles.
         const avail = d.availability || {};
-        const days = avail.days || [];
-        dayCheckboxes.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-            cb.checked = days.includes(cb.value);
+        const byDay = {};
+        if (Array.isArray(avail.schedule)) {
+            avail.schedule.forEach(item => {
+                if (item && item.day) {
+                    byDay[item.day] = { start: item.start || '', end: item.end || '' };
+                }
+            });
+        } else if (Array.isArray(avail.days)) {
+            avail.days.forEach(day => { byDay[day] = { start: '', end: '' }; });
+        }
+
+        SCHEDULE_DAYS.forEach(day => {
+            const cb = scheduleRows.querySelector(`input[type="checkbox"][data-day="${day}"]`);
+            const s  = scheduleRows.querySelector(`.schedule-start[data-day="${day}"]`);
+            const e  = scheduleRows.querySelector(`.schedule-end[data-day="${day}"]`);
+            if (!cb) return;
+            const has = day in byDay;
+            cb.checked = has;
+            s.value = has ? byDay[day].start : '';
+            e.value = has ? byDay[day].end : '';
         });
+
         shiftSelect.value = avail.shift_preference || '';
         notesInput.value = avail.notes || '';
+
+        applyGapHints(d);
     }
+
+    /* ── Clarification heuristics ─────────────────────────────────────── */
+    const banner       = document.getElementById('clarifyBanner');
+    const bannerMsg    = document.getElementById('clarifyMessage');
+    const reRecordLink = document.getElementById('reRecordLink');
+    const availSection = document.getElementById('availabilitySection');
+
+    function clearMarks() {
+        document.querySelectorAll('.field-missing').forEach(el => el.classList.remove('field-missing'));
+        if (banner) banner.style.display = 'none';
+        if (reRecordLink) reRecordLink.style.display = 'none';
+    }
+
+    function applyGapHints(d) {
+        clearMarks();
+        const work = d.work_experience || [];
+
+        // 1. No work captured at all.
+        if (work.length === 0) {
+            bannerMsg.textContent = "We didn't catch any work in your story. Try recording it again.";
+            if (storyUrl) {
+                reRecordLink.href = storyUrl;
+                reRecordLink.style.display = '';
+            }
+            banner.style.display = '';
+            return;
+        }
+
+        // 2. Per-item gaps: missing duration or category.
+        const cards = workList.querySelectorAll('.work-card');
+        let perItemGaps = 0;
+        work.forEach((item, i) => {
+            const card = cards[i];
+            if (!card) return;
+            if (item.duration === undefined || item.duration === null || item.duration === '') {
+                const dur = card.querySelector('.f-dur');
+                if (dur) { dur.classList.add('field-missing'); perItemGaps++; }
+            }
+            if (!item.category) {
+                const cat = card.querySelector('.f-cat');
+                if (cat) { cat.classList.add('field-missing'); perItemGaps++; }
+            }
+        });
+
+        // 3. Availability section blank.
+        const avail = d.availability || {};
+        const hasSchedule = (avail.schedule || []).length > 0 || (avail.days || []).length > 0;
+        const hasShift = !!avail.shift_preference;
+        const hasNotes = !!(avail.notes && String(avail.notes).trim());
+        const availGap = !hasSchedule && !hasShift && !hasNotes;
+        if (availGap && availSection) {
+            availSection.classList.add('field-missing');
+        }
+
+        if (perItemGaps > 0 || availGap) {
+            bannerMsg.textContent = 'A few quick details to add — see the fields marked below.';
+            banner.style.display = '';
+        }
+    }
+
+    // Live-clear a mark when the user provides a value for that field.
+    function bindMissingClearers() {
+        document.addEventListener('input', (e) => {
+            const t = e.target;
+            if (t && t.classList && t.classList.contains('field-missing')) {
+                if (t.value && String(t.value).trim()) t.classList.remove('field-missing');
+                reEvaluateBanner();
+            }
+        });
+        document.addEventListener('change', (e) => {
+            const t = e.target;
+            if (t && t.classList && t.classList.contains('field-missing')) {
+                if (t.value && String(t.value).trim()) t.classList.remove('field-missing');
+            }
+            // Availability section: any day check / time entry / shift / note change clears the section mark.
+            if (availSection && availSection.classList.contains('field-missing')) {
+                const inside = availSection.contains(t);
+                if (inside) {
+                    const someDay   = !!availSection.querySelector('input[type="checkbox"]:checked');
+                    const someTime  = !!availSection.querySelector('input[type="time"][value]:not([value=""])');
+                    const someShift = shiftSelect && !!shiftSelect.value;
+                    const someNote  = notesInput && !!notesInput.value.trim();
+                    if (someDay || someTime || someShift || someNote) {
+                        availSection.classList.remove('field-missing');
+                    }
+                }
+            }
+            reEvaluateBanner();
+        });
+    }
+
+    function reEvaluateBanner() {
+        if (!banner || banner.style.display === 'none') return;
+        // Only auto-hide the in-page gaps banner (not the no-work one — that
+        // is intentional and lives until the user re-records).
+        if (reRecordLink && reRecordLink.style.display !== 'none') return;
+        const remaining = document.querySelectorAll('.field-missing');
+        if (remaining.length === 0) banner.style.display = 'none';
+    }
+
+    bindMissingClearers();
 
     /* ── Collect form into JSON ───────────────────────────────────────── */
     function collect() {
@@ -143,10 +267,20 @@
             work_experience.push(item);
         });
 
-        const days = [];
-        dayCheckboxes.querySelectorAll('input:checked').forEach(cb => days.push(cb.value));
+        const schedule = [];
+        SCHEDULE_DAYS.forEach(day => {
+            const cb = scheduleRows.querySelector(`input[type="checkbox"][data-day="${day}"]`);
+            if (!cb || !cb.checked) return;
+            const s = scheduleRows.querySelector(`.schedule-start[data-day="${day}"]`);
+            const e = scheduleRows.querySelector(`.schedule-end[data-day="${day}"]`);
+            const item = { day };
+            if (s && s.value) item.start = s.value;
+            if (e && e.value) item.end = e.value;
+            schedule.push(item);
+        });
 
-        const availability = { days };
+        const availability = {};
+        if (schedule.length) availability.schedule = schedule;
         if (shiftSelect.value) availability.shift_preference = shiftSelect.value;
         if (notesInput.value.trim()) availability.notes = notesInput.value.trim();
 

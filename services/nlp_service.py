@@ -35,11 +35,10 @@ Output ONLY valid JSON matching this exact schema (omit any field not mentioned 
   ],
   "summary": "One sentence summary of the worker's overall background",
   "availability": {
-    "days": ["monday", "tuesday", "wednesday", "thursday", "friday"],
-    "shift_preference": "one of: morning, afternoon, evening, night, flexible",
-    "time_ranges": [
-      {"start": "06:00", "end": "14:00"}
+    "schedule": [
+      {"day": "monday", "start": "09:00", "end": "17:00"}
     ],
+    "shift_preference": "one of: morning, afternoon, evening, night, flexible",
     "notes": "Any additional availability details"
   }
 }
@@ -47,12 +46,15 @@ Output ONLY valid JSON matching this exact schema (omit any field not mentioned 
 Rules:
 - Output ONLY the JSON object, no markdown, no explanation, no code fences.
 - Create one entry in "work_experience" for each distinct kind of work the person describes.
-- A kind of work named in the skills answer and described again in the experience answer is the SAME entry — merge them into one, do not duplicate.
+- If the worker mentions the same kind of work more than once (for example naming it briefly and then describing it in detail), merge those into a single entry — do not duplicate.
 - "duration" is how long the person did THAT kind of work, and "duration_unit" is the unit they used. Capture the unit they actually said: "4 months" -> duration 4, duration_unit "months"; "2 years" -> duration 2, duration_unit "years"; "a couple weeks" -> duration 2, duration_unit "weeks".
 - NEVER add up durations across entries: different jobs often overlap in time, so a combined total would be misleading.
 - Omit both "duration" and "duration_unit" when no length of time is given for that work.
-- Use lowercase for days of the week.
-- If specific time ranges are not mentioned, omit time_ranges.
+- For availability, create one entry in "schedule" for each day the worker can work. Use lowercase English day names ("monday" ... "sunday").
+- If the worker mentioned specific hours for a day, include "start" and "end" in 24-hour HH:MM format. Convert spoken times: "9am" -> "09:00", "5pm" -> "17:00", "noon" -> "12:00", "midnight" -> "00:00".
+- If the worker said the same hours apply to multiple days (e.g. "Friday and Saturday 9am to 5pm"), include the same start/end on EACH of those day entries — do not deduplicate the hours.
+- "shift_preference" is only for vague descriptors like "mornings" or "flexible". If you already captured specific start/end hours for the days the worker mentioned, OMIT "shift_preference".
+- Omit "schedule" entirely if no days were mentioned at all.
 - If information is unclear or not mentioned, omit that field entirely rather than guessing.\
 """
 
@@ -61,9 +63,12 @@ def _build_user_prompt(transcripts: dict) -> str:
     parts = ["Here are the transcripts from a worker's onboarding interview:\n"]
     labels = {
         "name": "Name",
+        "story": "Work story",
+        "availability": "Availability",
+        # Legacy keys from the earlier multi-question flow, kept so older
+        # profiles can still be re-extracted from their stored transcripts.
         "skills": "Kinds of work",
         "experience": "How long and where",
-        "availability": "Availability",
     }
     for key, label in labels.items():
         text = transcripts.get(key, "")
@@ -106,7 +111,7 @@ def extract_profile_data(transcripts: dict) -> dict:
     Extract structured profile data from onboarding transcripts using a local LLM.
 
     Args:
-        transcripts: dict like {"name": "...", "skills": "...", "experience": "...", "availability": "..."}
+        transcripts: dict like {"name": "...", "story": "...", "availability": "..."}
 
     Returns:
         Structured profile_data dict matching the JSONB schema.

@@ -16,8 +16,7 @@ ONBOARDING_STEPS = [
     "intro",
     "name",
     "name_confirm",
-    "skills",
-    "experience",
+    "story",
     "availability",
     "review"
 ]
@@ -25,20 +24,21 @@ ONBOARDING_STEPS = [
 # Short, ordered labels shown on the intro screen so the user knows what's coming.
 INTRO_OUTLINE = [
     "Your name",
-    "The kinds of work you can do",
-    "How long you've done each — and where",
+    "Your work experience — what you've done, how long, and where",
     "The days and hours you're available",
 ]
 
 QUESTIONS = {
     'name':         "What is your full name?",
-    'skills':       "What kinds of work can you do? Name as many as you like — for example painting, driving, warehouse work, or cleaning.",
-    'experience':   "For each kind of work you mentioned, about how long have you done it, and where?",
+    'story':        "Tell me about your work experience — every kind of work you've done, how long you did each, and where if you remember. You have up to 3 minutes. Take your time.",
     'availability': "What days and hours are you available to work?",
 }
 
 # Ordered steps (excluding name_confirm which is an intermediate state)
-VOICE_STEPS = ["name", "skills", "experience", "availability"]
+VOICE_STEPS = ["name", "story", "availability"]
+
+# How long (seconds) the worker may speak per voice step. Story is capped at 3 min.
+STEP_MAX_SECONDS = {"story": 180}
 
 
 def clean_transcribed_name(transcription: str) -> str:
@@ -272,12 +272,12 @@ def confirm_name(profile_id):
                 return jsonify({"error": "Name cannot be empty"}), 400
             profile.name = edited_text
 
-        profile.onboarding_state = "skills"
+        profile.onboarding_state = "story"
         db.session.commit()
 
         return jsonify({
             "success": True,
-            "next_url": url_for("onboarding.voice_step", profile_id=profile.id, step="skills")
+            "next_url": url_for("onboarding.voice_step", profile_id=profile.id, step="story")
         })
     else:
         # Reset so the user can try again
@@ -293,10 +293,10 @@ def confirm_name(profile_id):
 
 
 # ---------------------------------------------------------------------------
-# Generic voice steps: skills, experience, availability
+# Generic voice steps: story, availability
 # ---------------------------------------------------------------------------
 
-GENERIC_STEPS = VOICE_STEPS[1:]  # ["skills", "experience", "availability"]
+GENERIC_STEPS = VOICE_STEPS[1:]  # ["story", "availability"]
 
 
 @onboarding_bp.route("/<int:profile_id>/<step>")
@@ -308,19 +308,12 @@ def voice_step(profile_id, step):
 
     profile = WorkerProfile.query.get_or_404(profile_id)
 
-    # Reference back to the skills answer so the experience question feels
-    # connected and elicits a duration for each kind of work just mentioned.
-    question_hint = None
-    if step == "experience":
-        skills_said = (profile.transcripts or {}).get("skills")
-        if skills_said:
-            question_hint = f'You said: “{skills_said}”'
-
     return render_template(
         "onboarding/record_question.html",
         question_id=step,
         question_text=QUESTIONS[step],
-        question_hint=question_hint,
+        question_hint=None,
+        max_seconds=STEP_MAX_SECONDS.get(step),
         transcribe_url=url_for("onboarding.voice_transcribe", profile_id=profile.id, step=step),
         is_last_step=(step == GENERIC_STEPS[-1]),
     )

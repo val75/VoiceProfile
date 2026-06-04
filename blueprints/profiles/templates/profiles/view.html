@@ -93,10 +93,24 @@
         <div class="section">
             <h2>Availability</h2>
             {% set avail = d.availability or {} %}
-            {% if avail.days %}
-            <div class="days-list">
+            {% set schedule = avail.schedule %}
+            {% if schedule %}
+            <div class="schedule-list">
+                {% for item in schedule %}
+                <div class="schedule-item">
+                    <span class="schedule-day">{{ item.day | capitalize }}</span>
+                    {% if item.start and item.end %}
+                    <span class="schedule-hours">{{ item.start }}–{{ item.end }}</span>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% elif avail.days %}
+            <div class="schedule-list">
                 {% for day in avail.days %}
-                <span class="day-pill">{{ day }}</span>
+                <div class="schedule-item">
+                    <span class="schedule-day">{{ day | capitalize }}</span>
+                </div>
                 {% endfor %}
             </div>
             {% endif %}
@@ -106,7 +120,7 @@
             {% if avail.notes %}
             <p class="avail-detail"><span>Notes:</span> {{ avail.notes }}</p>
             {% endif %}
-            {% if not avail.days and not avail.shift_preference %}
+            {% if not schedule and not avail.days and not avail.shift_preference and not avail.notes %}
             <p class="empty">No availability recorded</p>
             {% endif %}
         </div>

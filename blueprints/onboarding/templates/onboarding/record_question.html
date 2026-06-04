@@ -13,6 +13,11 @@
         {% if question_hint %}
         <p id="questionHint" style="color:#6b7280;font-size:15px;font-style:italic;margin-top:-8px;margin-bottom:16px">{{ question_hint }}</p>
         {% endif %}
+        {% if max_seconds %}
+        <p id="maxHint" style="color:#6b7280;font-size:13px;margin-top:-4px;margin-bottom:12px;text-align:center">
+            Max {{ max_seconds // 60 }} min — recording stops automatically.
+        </p>
+        {% endif %}
 
         <div class="timer" id="timer">00:00</div>
 
@@ -61,6 +66,7 @@
         <input type="hidden" id="questionId" value="{{ question_id }}">
         <input type="hidden" id="transcribeUrl" value="{{ transcribe_url }}">
         <input type="hidden" id="isLastStep" value="{{ 'true' if is_last_step else 'false' }}">
+        <input type="hidden" id="maxSeconds" value="{{ max_seconds or '' }}">
     </div>
 
     <!-- Scripts loaded in dependency order -->

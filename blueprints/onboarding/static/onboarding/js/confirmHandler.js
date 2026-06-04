@@ -30,10 +30,22 @@
         const btnRetry     = document.getElementById('btnRetry');
 
         /* ── State ────────────────────────────────────────────────────── */
+        const questionId   = document.getElementById('questionId').value;
+        const isStoryStep  = questionId === 'story';
         let confirmUrl          = null;
         let attemptCount        = 0;
         let isEditing           = false;
         let currentTranscription = '';
+
+        /* Format an "MM:SS" timer string as e.g. "1m 34s" / "42s" / "3m". */
+        function formatDuration(mmss) {
+            const m = parseInt(mmss.slice(0, 2), 10);
+            const s = parseInt(mmss.slice(3, 5), 10);
+            if (!Number.isFinite(m) || !Number.isFinite(s)) return mmss;
+            if (m === 0) return `${s}s`;
+            if (s === 0) return `${m}m`;
+            return `${m}m ${s}s`;
+        }
 
         /* ── Helpers ──────────────────────────────────────────────────── */
         function showConfirmPanel(text) {
@@ -116,6 +128,20 @@
                 confirmUrl = data.confirm_url || null;
 
                 const displayText = data.name || data.transcription;
+
+                // Story step: a 3-min transcript is too long to confirm
+                // by reading. Show a duration preview + Continue / Re-record.
+                if (isStoryStep && confirmUrl && displayText) {
+                    currentTranscription = displayText;
+                    const captured = formatDuration(elements.timer.textContent);
+                    heardLabel.textContent = 'Captured';
+                    btnConfirm.textContent = 'Continue';
+                    btnEdit.style.display = 'none';
+                    statusEl.textContent = '';
+                    showConfirmPanel(captured);
+                    return;
+                }
+
                 if (confirmUrl && displayText) {
                     currentTranscription = displayText;
                     statusEl.textContent = 'Does this look right?';

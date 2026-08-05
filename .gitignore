@@ -9,17 +9,16 @@ venv/
 .env
 helloworld.py
 
-# App generated directories
-migrations/
-
 # JetBrains (need to refine)
 .idea
 
 # Any .wav files
 *.wav
 
-# .md files
+# Markdown: ignore scratch/planning notes by default, keep versioned docs
 *.md
+!CLAUDE.md
+!docs/**/*.md
 
 # Python bytecode
 __pycache__/

@@ -36,7 +36,9 @@ def transcribe_audio(file_storage):
             whisper_url,
             files=files,
             headers=headers,
-            timeout=180,
+            # Keep under Cloudflare's 100s edge timeout so a slow Whisper call
+            # surfaces as a handled error here, not a bare 524 at the edge.
+            timeout=90,
         )
     except requests.RequestException as e:
         raise SpeechToTextError("Whisper service unreachable") from e

@@ -371,18 +371,29 @@ systemctl list-timers voiceprofile-backup.timer
 
 #### Restore procedure (test it once, before you need it)
 
+The app's DB role lacks `CREATEDB`, so scratch-restore drills run as the
+`postgres` superuser (peer auth, no password). The dump must be somewhere
+`postgres` can read (e.g. `/tmp`).
+
 ```bash
 # Restore into a SCRATCH database first, to confirm the dump is good:
-createdb voiceprofile_restore_test
-pg_restore --no-owner --no-privileges -d voiceprofile_restore_test <dump-file>
-psql -d voiceprofile_restore_test -c '\dt'      # tables present?
-dropdb voiceprofile_restore_test                 # clean up
+DUMP="$(ls -t /home/cato-user/backups/voiceprofile/*.dump | head -1)"
+cp "$DUMP" /tmp/restore_test.dump
+sudo -u postgres createdb voiceprofile_restore_test
+sudo -u postgres pg_restore --no-owner --no-privileges -d voiceprofile_restore_test /tmp/restore_test.dump
+sudo -u postgres psql -d voiceprofile_restore_test -c '\dt'   # expect profiles, reviews, otp_codes
+sudo -u postgres dropdb voiceprofile_restore_test
+rm /tmp/restore_test.dump
 
 # Real recovery (DESTRUCTIVE — overwrites current data):
 sudo systemctl stop voiceprofile                 # stop writes
-pg_restore --clean --if-exists --no-owner --no-privileges -d "$DATABASE_URL" <dump-file>
+sudo -u postgres pg_restore --clean --if-exists --no-owner --no-privileges \
+  -d voiceprofile /tmp/<dump-file>               # adjust DB name if not "voiceprofile"
 sudo systemctl start voiceprofile
 ```
+
+Confirmed working: a scratch restore of the first nightly dump brought back
+`profiles`, `reviews`, and `otp_codes`.
 
 #### Rebuilding from an empty database
 

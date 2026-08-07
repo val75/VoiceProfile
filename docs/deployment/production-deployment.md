@@ -186,6 +186,24 @@ A lightweight readiness probe at `/healthz` runs `SELECT 1` and returns `200
 uptime monitors, or a future load balancer a real signal that the app can serve
 requests, not just that the process is alive.
 
+### Backups: pg_dump, off-box copies, tested restores
+
+`pg_dump` writes a single point-in-time snapshot of the whole database — schema
+and every row, **including the photo blobs stored in `profiles`** — to one file.
+Because the photos live in Postgres (not on the filesystem), this one dump is the
+complete backup of everything the pilot has collected.
+
+We use the **custom format** (`-Fc`): compressed, and restorable selectively with
+`pg_restore`. A systemd timer runs it nightly, keeps 14 days locally, and copies
+each dump **off the box to the DGX** over the private link. Off-box is the point:
+a dump on the same disk as the database is lost with it in a disk failure — the
+off-box copy is what turns "a file" into "a backup".
+
+The discipline that's easy to skip: **restore-test it**. A dump you've never
+restored can be silently truncated, mis-permissioned, or version-incompatible.
+The runbook restores into a scratch database precisely so a real recovery isn't
+the first time that path has ever run.
+
 ---
 
 ## Change log
@@ -320,6 +338,68 @@ suite passes (hashing, wrong-code, single-use, 5-attempt lockout, expiry,
 one-code-per-phone); gunicorn boots 3 workers; `/` and `/healthz` return 200;
 `SECRET_KEY` unset in prod raises, dev fallback works.
 
+### Section 5 — Backups + restore ✅ (setup runbook; run on the box)
+
+Added `deploy/backup_db.sh` + `voiceprofile-backup.{service,timer}`: a nightly
+`pg_dump` (custom compressed format — includes photo blobs), 14-day retention,
+copied off-box to the DGX over the private network. Verified locally: the dump
+is produced and `pg_restore --list` shows all tables (`profiles`, `reviews`,
+`otp_codes`).
+
+#### Backup setup (run on the app server)
+
+```bash
+# 1. One-time: SSH key from the app server to the DGX (as cato-user)
+ssh-keygen -t ed25519 -f ~/.ssh/voiceprofile_backup -N ""
+ssh-copy-id -i ~/.ssh/voiceprofile_backup.pub cato-user@<DGX_HOST>
+ssh -i ~/.ssh/voiceprofile_backup cato-user@<DGX_HOST> 'echo ok'   # test
+
+# 2. Install the units (set DGX_HOST in the .service first)
+sudo cp deploy/voiceprofile-backup.service /etc/systemd/system/
+sudo cp deploy/voiceprofile-backup.timer   /etc/systemd/system/
+sudoedit /etc/systemd/system/voiceprofile-backup.service   # set DGX_HOST
+sudo systemctl daemon-reload
+
+# 3. Run once now and verify end-to-end
+sudo systemctl start voiceprofile-backup.service
+journalctl -u voiceprofile-backup.service -n 30 --no-pager
+ls -lh /home/cato-user/backups/voiceprofile/
+ssh -i ~/.ssh/voiceprofile_backup cato-user@<DGX_HOST> 'ls -lh /data/backups/voiceprofile/'
+
+# 4. Enable the nightly timer
+sudo systemctl enable --now voiceprofile-backup.timer
+systemctl list-timers voiceprofile-backup.timer
+```
+
+#### Restore procedure (test it once, before you need it)
+
+```bash
+# Restore into a SCRATCH database first, to confirm the dump is good:
+createdb voiceprofile_restore_test
+pg_restore --no-owner --no-privileges -d voiceprofile_restore_test <dump-file>
+psql -d voiceprofile_restore_test -c '\dt'      # tables present?
+dropdb voiceprofile_restore_test                 # clean up
+
+# Real recovery (DESTRUCTIVE — overwrites current data):
+sudo systemctl stop voiceprofile                 # stop writes
+pg_restore --clean --if-exists --no-owner --no-privileges -d "$DATABASE_URL" <dump-file>
+sudo systemctl start voiceprofile
+```
+
+#### Rebuilding from an empty database
+
+The migration chain's root is *"add onboarding fields"*, not *"create tables"*
+(the base schema was originally built with `flask init-db` / `db.create_all()`),
+so a brand-new empty DB can't be built by `flask db upgrade` alone:
+
+```bash
+flask init-db         # create_all() builds current tables from the models
+flask db stamp head   # mark all migrations as already applied
+```
+
+Restoring a `pg_dump` does **not** have this problem — the dump contains the full
+schema. This note is only for standing up a fresh DB with no dump to restore.
+
 ---
 
 ## Open items
@@ -328,10 +408,19 @@ one-code-per-phone); gunicorn boots 3 workers; `/` and `/healthz` return 200;
   cutover runbook written. **Server cutover still to be run on the box.**
 - [x] **Section 4** — OTP → Postgres (hashed, attempt-limited), `SECRET_KEY`
   fail-loud, cookie hardening, `ProxyFix`, `/healthz`, workers bumped to 3.
-- [ ] **Section 5** — `pg_dump` backups on a timer; finalize the deploy runbook,
-  including the from-scratch bootstrap note above.
-- [ ] **Server cutover** — run the Section 3 runbook on the box (now deploys
-  Section 4 too). Not yet done; server still on `flask run` + `main`.
+- [x] **Section 5** — nightly `pg_dump` backups (systemd timer) copied off-box
+  to the DGX, retention + restore procedure documented; from-scratch bootstrap
+  note added.
+
+### Remaining — on the server (all build work is done)
+
+- [ ] **Server cutover** — run the Section 3 cutover runbook on the box (also
+  applies the Section 4 OTP migration). Server is still on `flask run` + `main`.
+- [ ] **Backup setup** — run the Section 5 backup setup runbook (SSH key to DGX,
+  install units, test once, enable timer).
+- [ ] **Test restore** — do the scratch-DB restore once so recovery is proven.
+- [ ] **Push the branch** — `git push -u origin chore/production-deploy`, then
+  eventually merge to `main` so production doesn't sit on a feature branch.
 
 ### Resolved during setup
 

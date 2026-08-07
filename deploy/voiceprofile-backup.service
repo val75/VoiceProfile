@@ -1,0 +1,30 @@
+# systemd oneshot that runs the nightly DB backup. Triggered by the timer.
+#
+#   sudo cp deploy/voiceprofile-backup.service /etc/systemd/system/
+#   sudo cp deploy/voiceprofile-backup.timer   /etc/systemd/system/
+#   # edit DGX_HOST below to the DGX's hostname/IP, then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now voiceprofile-backup.timer
+#
+# Test it immediately with: sudo systemctl start voiceprofile-backup.service
+# See docs/deployment/production-deployment.md (Section 5).
+
+[Unit]
+Description=VoiceProfile nightly database backup
+After=network-online.target postgresql.service
+Wants=network-online.target postgresql.service
+
+[Service]
+Type=oneshot
+User=cato-user
+Group=cato-user
+WorkingDirectory=/home/cato-user/VoiceProfile
+ExecStart=/home/cato-user/VoiceProfile/deploy/backup_db.sh
+
+# --- Backup settings (edit DGX_HOST to enable the off-box copy) -------------
+Environment=BACKUP_DIR=/home/cato-user/backups/voiceprofile
+Environment=RETENTION_DAYS=14
+Environment=DGX_HOST=<DGX_HOSTNAME_OR_IP>
+Environment=DGX_USER=cato-user
+Environment=DGX_DIR=/data/backups/voiceprofile
+Environment=SSH_KEY=/home/cato-user/.ssh/voiceprofile_backup

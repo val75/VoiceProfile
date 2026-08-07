@@ -221,11 +221,9 @@ Make the app reproducible from a clean clone.
 - Narrowed the blanket `*.md` ignore so real docs (`CLAUDE.md`, `docs/`) are
   versioned while `tasks/` planning notes stay local.
 
-**Known follow-up:** the migration chain's root is *"add onboarding fields,"* not
-*"create tables"* — the base schema was bootstrapped with `flask init-db`
-(`db.create_all()`). A rebuild from a totally empty database needs `init-db`
-first (or an `alembic stamp`), not `flask db upgrade` alone. Production already
-has its schema, so this only matters for a future from-scratch rebuild.
+**Resolved** (see "Migration reconciliation" below): the committed history was
+later squashed to a single clean initial migration that creates the base tables,
+so `flask db upgrade` now builds the full schema from an empty database.
 
 ### Section 1 — Gunicorn WSGI serving ✅
 
@@ -388,17 +386,41 @@ sudo systemctl start voiceprofile
 
 #### Rebuilding from an empty database
 
-The migration chain's root is *"add onboarding fields"*, not *"create tables"*
-(the base schema was originally built with `flask init-db` / `db.create_all()`),
-so a brand-new empty DB can't be built by `flask db upgrade` alone:
+The migration history now starts with a clean initial migration that creates the
+base tables, so a brand-new empty DB builds with just:
 
 ```bash
-flask init-db         # create_all() builds current tables from the models
-flask db stamp head   # mark all migrations as already applied
+flask db upgrade      # builds profiles + reviews + otp_codes from empty
 ```
 
-Restoring a `pg_dump` does **not** have this problem — the dump contains the full
-schema. This note is only for standing up a fresh DB with no dump to restore.
+No `init-db` / `stamp` dance is needed. Restoring a `pg_dump` also rebuilds
+everything (the dump contains the full schema).
+
+### Migration reconciliation ✅
+
+During the server cutover we discovered the app server's database was on a
+*different* migration lineage than the branch: a single squashed
+`initial_migration` created directly on the box, while the laptop carried a
+4-step incremental chain ending in `add profile.locale`. They diverged because
+`migrations/` had been gitignored on both machines, so neither shared history.
+The laptop chain's `locale` column doesn't even exist in `main`'s model — it was
+i18n-era drift.
+
+With no production data worth keeping, we reset to **one clean history** instead
+of splicing the two:
+
+- New `e5c9a1f3b207_initial_schema.py` — a squashed baseline creating `profiles`
+  + `reviews` from empty (matches `main`'s models; no `locale`).
+- `b7e2a91c4f08_add_otp_codes.py` re-pointed onto it (`down_revision =
+  e5c9a1f3b207`).
+- Deleted the 4 divergent laptop migrations.
+
+Verified offline (no DB touched): single head `b7e2a91c4f08`; `base → head` DDL
+creates `profiles`, `reviews`, `otp_codes` with their indexes.
+
+**Cutover impact:** the server DB is dropped and recreated empty, then
+`flask db upgrade` builds the clean schema. (When `feat/i18n` merges later, its
+`locale` change returns properly as a new migration on top of this baseline.)
 
 ---
 

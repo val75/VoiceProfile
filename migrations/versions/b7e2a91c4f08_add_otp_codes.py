@@ -1,7 +1,7 @@
 """add otp_codes table
 
 Revision ID: b7e2a91c4f08
-Revises: cae1bde8aad1
+Revises: e5c9a1f3b207
 Create Date: 2026-08-07
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = 'b7e2a91c4f08'
-down_revision = 'cae1bde8aad1'
+down_revision = 'e5c9a1f3b207'
 branch_labels = None
 depends_on = None
 

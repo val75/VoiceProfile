@@ -1,0 +1,47 @@
+# systemd unit for VoiceProfile (gunicorn).
+#
+# Install on the app server:
+#   sudo cp deploy/voiceprofile.service /etc/systemd/system/voiceprofile.service
+#   # edit the <PLACEHOLDERS> below to match the server, then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now voiceprofile
+#
+# See docs/deployment/production-deployment.md (Section 3) for the full runbook.
+
+[Unit]
+Description=VoiceProfile (gunicorn WSGI server)
+# Start after the network is up and PostgreSQL is available. Remove the
+# postgresql lines if the DB is not a systemd service on this box.
+# Start after the network is up and PostgreSQL is available. Wants (not
+# Requires) so a Postgres blip doesn't force-stop the app; gunicorn boots
+# fine without an immediate DB connection.
+After=network-online.target postgresql.service
+Wants=network-online.target postgresql.service
+
+[Service]
+Type=notify
+# Run as an unprivileged user that owns the repo and venv — never root.
+User=cato-user
+Group=cato-user
+
+# Repo checkout dir. Makes load_dotenv() find .env and gunicorn find
+# gunicorn.conf.py / wsgi.py via relative paths.
+WorkingDirectory=/home/cato-user/VoiceProfile
+
+# Absolute path to gunicorn inside the venv.
+ExecStart=/home/cato-user/VoiceProfile/venv/bin/gunicorn -c gunicorn.conf.py wsgi:app
+ExecReload=/bin/kill -s HUP $MAINPID
+
+# Restart on crash; give in-flight requests time to drain on stop
+# (matches graceful_timeout in gunicorn.conf.py).
+Restart=on-failure
+RestartSec=5
+KillMode=mixed
+TimeoutStopSec=30
+
+# Light hardening.
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

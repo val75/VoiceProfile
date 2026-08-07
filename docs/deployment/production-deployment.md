@@ -138,24 +138,99 @@ has its schema, so this only matters for a future from-scratch rebuild.
 ### Section 1 — Gunicorn WSGI serving ✅
 
 - Added `wsgi.py` exposing `app = create_app()` for gunicorn to import.
-- Added `gunicorn.conf.py`: loopback bind `127.0.0.1:5001`, `gthread` workers
-  (3 × 4 threads = 12 concurrent), timeout chain (see above), logs to
-  stdout/stderr for journald.
+- Added `gunicorn.conf.py`: loopback bind `127.0.0.1:5001`, `gthread` workers,
+  timeout chain (see above), logs to stdout/stderr for journald. Workers pinned
+  to **1** for now (see Section 3) — bumps to 3 once OTP is in Postgres.
 - Dropped the Whisper client timeout 180s → 90s to fit under the edge limit.
 - Smoke-tested locally: gunicorn boots 3 gthread workers and serves `/` with
   HTTP 200.
 
 Run it: `gunicorn -c gunicorn.conf.py wsgi:app`
 
+### Section 3 — systemd service ✅ (unit + runbook; server cutover pending)
+
+Added `deploy/voiceprofile.service` — a systemd unit that runs gunicorn as
+`cato-user` from `/home/cato-user/VoiceProfile`, starts on boot, restarts on
+crash, and logs to journald. Replaces the manual `flask run`.
+
+**Interim concurrency:** workers pinned to **1** (see `gunicorn.conf.py`) until
+OTP moves to Postgres (Section 4), so the in-memory OTP store keeps working.
+One worker × 4 threads = 4 concurrent requests, fine for a pilot. Bumps to 3
+in Section 4.
+
+**Worker/DB ordering:** `Wants=` (not `Requires=`) `postgresql.service`, so a
+Postgres blip doesn't force-stop the app. On Ubuntu `postgresql.service` is a
+wrapper that starts the real `postgresql@16-main.service`.
+
+#### Cutover runbook (run on the app server)
+
+The server tracks `main` (no i18n live). Deploying this branch is safe. Code
+reaches the server via `git pull`.
+
+```bash
+# 1. From the laptop: publish the branch
+git push -u origin chore/production-deploy
+
+# 2. On the server, in /home/cato-user/VoiceProfile
+git fetch origin
+git checkout chore/production-deploy
+git pull
+
+# 3. Sync dependencies (gunicorn + other newly pinned deps)
+venv/bin/pip install -r requirements.txt
+
+# 4. Apply any pending migrations (idempotent; DB is already populated)
+venv/bin/flask db upgrade
+
+# 5. Test gunicorn on a temp port WITHOUT disturbing the running `flask run`
+venv/bin/gunicorn -c gunicorn.conf.py --bind 127.0.0.1:8099 wsgi:app
+#    in another shell:
+curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8099/   # expect 200
+#    then Ctrl-C the test gunicorn
+
+# 6. Install the unit
+sudo cp deploy/voiceprofile.service /etc/systemd/system/voiceprofile.service
+sudo systemctl daemon-reload
+
+# 7. Stop the old dev server (frees 127.0.0.1:5001), then start the service
+#    stop `flask run` however it's currently launched (Ctrl-C / tmux / kill)
+sudo systemctl enable --now voiceprofile
+
+# 8. Verify
+sudo systemctl status voiceprofile --no-pager
+curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:5001/   # expect 200
+sudo journalctl -u voiceprofile -n 30 --no-pager
+#    then load https://tryout.sharegud.com (or phone on cellular)
+```
+
+**Rollback** (if gunicorn misbehaves):
+
+```bash
+sudo systemctl disable --now voiceprofile
+# restart `flask run` the old way, then investigate before retrying
+```
+
+Step 7 has a few seconds of downtime between stopping `flask run` and the
+service starting — acceptable for a pilot.
+
+**Subsequent deploys** become: `git pull && venv/bin/pip install -r
+requirements.txt && venv/bin/flask db upgrade && sudo systemctl restart
+voiceprofile`.
+
+**Later:** once all sections are done and merged to `main`, point the server
+back at `main` (`git checkout main && git pull`) so production doesn't sit on a
+feature branch.
+
 ---
 
 ## Open items
 
-- [ ] **Section 3** — systemd unit: start on boot, restart on crash, logs to
-  journald. Replaces the manual `flask run` process.
+- [x] **Section 3** — systemd unit built (`deploy/voiceprofile.service`) +
+  cutover runbook written. **Server cutover still to be run on the box.**
 - [ ] **Section 4** — move OTP codes from the in-memory dict to PostgreSQL
-  (survives restarts + multiple workers), add attempt limiting; make
-  `SECRET_KEY` fail loudly if unset; add `/healthz`; harden session cookies.
+  (survives restarts + multiple workers), add attempt limiting; **then bump
+  gunicorn workers 1 → 3**; make `SECRET_KEY` fail loudly if unset; add
+  `/healthz`; harden session cookies.
 - [ ] **Section 5** — `pg_dump` backups on a timer; finalize the deploy runbook,
   including the from-scratch bootstrap note above.
 

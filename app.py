@@ -1,6 +1,8 @@
 import os
 
 from flask import Flask, render_template
+from sqlalchemy import text
+from werkzeug.middleware.proxy_fix import ProxyFix
 from config import Config
 from extensions.database import db, migrate
 from blueprints.auth.routes import auth_bp
@@ -14,6 +16,13 @@ from blueprints.reviews.routes import reviews_bp
 def create_app():
     myapp = Flask(__name__)
     myapp.config.from_object(Config)
+
+    # Behind Cloudflare Tunnel the app sees plain HTTP from cloudflared on
+    # loopback. Trust one hop of X-Forwarded-* so request.is_secure, the URL
+    # scheme, host, and client IP reflect the real browser, not the proxy.
+    # Safe because the app binds loopback only — nothing but cloudflared can
+    # reach it to forge these headers.
+    myapp.wsgi_app = ProxyFix(myapp.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
     db.init_app(myapp)
     migrate.init_app(myapp, db)
@@ -51,6 +60,16 @@ def create_app():
     @myapp.route('/')
     def home():
         return render_template('index.html')
+
+    @myapp.route('/healthz')
+    def healthz():
+        """Readiness probe: 200 if the DB answers, 503 otherwise."""
+        try:
+            db.session.execute(text("SELECT 1"))
+            return {"status": "ok"}, 200
+        except Exception:
+            myapp.logger.exception("healthz DB check failed")
+            return {"status": "db unavailable"}, 503
 
     return myapp
 

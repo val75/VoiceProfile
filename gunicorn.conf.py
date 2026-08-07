@@ -12,15 +12,12 @@ bind = "127.0.0.1:5001"
 # --- Concurrency -----------------------------------------------------------
 # Requests are I/O-bound: most of their time is spent waiting on the DGX
 # (Whisper up to 90s, LLM up to 30s), not on CPU. Threaded workers let one
-# worker serve other requests while a thread waits.
+# worker serve other requests while a thread waits. 3 workers x 4 threads =
+# 12 concurrent requests, generous for a pilot on a single box.
 #
-# workers is pinned to 1 UNTIL the OTP store moves to PostgreSQL (Section 4).
-# OTP codes currently live in an in-memory dict (services/otp_service.py),
-# shared across threads within one process but NOT across worker processes.
-# With >1 worker, a login code created in worker A is invisible to worker B
-# and verification fails intermittently. 1 worker x 4 threads = 4 concurrent
-# requests, fine for a pilot. Bump to 3 once OTP is in Postgres.
-workers = 1
+# Safe at >1 worker now that OTP codes live in PostgreSQL
+# (services/otp_service.py), not per-process memory (Section 4).
+workers = 3
 worker_class = "gthread"
 threads = 4
 

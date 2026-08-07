@@ -112,6 +112,80 @@ If recordings ever get long enough to approach 90s of Whisper time, the fix is
 not a bigger timeout but returning a job ID immediately and polling for the
 result — a documented escape hatch, not built yet.
 
+### Running behind a proxy — ProxyFix
+
+When a request reaches Flask, it answers questions like *"was this HTTPS?"*,
+*"what host did the user type?"*, and *"what's the client IP?"* by inspecting the
+**immediate TCP connection**. Behind the tunnel, that immediate connection is
+not the user — it's `cloudflared` talking to gunicorn over **plain HTTP on
+`127.0.0.1`**:
+
+```
+Browser ──HTTPS──> Cloudflare ──tunnel──> cloudflared ──HTTP──> Flask
+ (real client)                            (127.0.0.1)     (sees plain HTTP, localhost)
+```
+
+So by default Flask concludes the request is insecure HTTP from `127.0.0.1`. The
+real values aren't lost — the proxies forward them in headers (`X-Forwarded-Proto:
+https`, `X-Forwarded-For: <real IP>`, `X-Forwarded-Host: …`) — but Flask ignores
+those by default, because blindly trusting them would let any client lie.
+
+**What breaks without correction:** `request.is_secure` is `False`;
+`url_for(_external=True)` emits `http://` URLs (possible redirect loops /
+mixed-content); secure-cookie logic gets confused; and every client looks like
+`127.0.0.1` to logging or future rate-limiting.
+
+`ProxyFix` is a small WSGI middleware that trusts a **fixed number of proxy
+hops** and rewrites the request from their `X-Forwarded-*` headers:
+
+```python
+myapp.wsgi_app = ProxyFix(myapp.wsgi_app, x_for=1, x_proto=1, x_host=1)
+```
+
+`=1` means "trust exactly one hop" — the one our infrastructure adds. A client
+can't spoof it, because the trusted proxy appends its own value as the last hop.
+On the laptop it's a **no-op** (a direct localhost request has no `X-Forwarded-*`
+headers), so it's safe to apply unconditionally. The loopback bind is what makes
+trusting one hop safe: nothing but `cloudflared` can reach gunicorn to forge
+headers.
+
+### OTP codes: durable storage, hashing, attempt limits
+
+Login codes were kept in a module-level Python dict — fine for one `flask run`
+process, broken under gunicorn: a dict lives in **one** worker's memory, so a
+code created in worker A is invisible to worker B (intermittent login failure),
+and every restart/deploy wipes it. They now live in the `otp_codes` table.
+
+- **Hashed, not plaintext.** We store an **HMAC-SHA256** of the code, keyed with
+  `SECRET_KEY` and mixed with the phone number. A leaked DB or log can't be
+  reversed into live codes without also holding the app secret.
+- **Attempt limiting.** A 6-digit code is only 1,000,000 possibilities; unlimited
+  guesses is an account-takeover path. Each code allows **5** failed attempts,
+  then self-destructs. Expiry (5 min) and single-use-on-success still apply.
+- **Same interface.** `send_code` / `verify_code` keep their signatures, so
+  `auth/routes.py` is untouched. Going live with real SMS is a one-line change:
+  replace the `print()` in `send_code` with a provider call.
+
+### SECRET_KEY, sessions, and cookie flags
+
+Flask signs the session cookie with `SECRET_KEY`; it also keys the OTP hashes
+above. `config.py` used to fall back to `"dev_secret"` if the env var was
+missing — meaning a misconfigured deploy would boot with a **guessable** key and
+nobody would notice (forgeable sessions and OTP hashes). It now **refuses to
+start** in production when `SECRET_KEY` is unset, keeping a throwaway default
+only under `FLASK_DEBUG=1` for local convenience.
+
+Session cookies are hardened: `HttpOnly` (JS can't read them — XSS mitigation),
+`SameSite=Lax` (not sent cross-site — CSRF mitigation), and `Secure` (HTTPS only)
+— the last gated off in debug so localhost dev over plain HTTP still works.
+
+### /healthz
+
+A lightweight readiness probe at `/healthz` runs `SELECT 1` and returns `200
+{"status":"ok"}` when the database answers, `503` otherwise. It gives systemd,
+uptime monitors, or a future load balancer a real signal that the app can serve
+requests, not just that the process is alive.
+
 ---
 
 ## Change log
@@ -153,10 +227,11 @@ Added `deploy/voiceprofile.service` — a systemd unit that runs gunicorn as
 `cato-user` from `/home/cato-user/VoiceProfile`, starts on boot, restarts on
 crash, and logs to journald. Replaces the manual `flask run`.
 
-**Interim concurrency:** workers pinned to **1** (see `gunicorn.conf.py`) until
-OTP moves to Postgres (Section 4), so the in-memory OTP store keeps working.
-One worker × 4 threads = 4 concurrent requests, fine for a pilot. Bumps to 3
-in Section 4.
+**Concurrency:** we chose to build Section 4 (OTP → Postgres) before cutting
+over, so the OTP store is already cross-worker-safe. The service therefore runs
+**3 workers × 4 threads = 12 concurrent** from the first cutover — no interim
+single-worker step. (`gunicorn.conf.py` carried a temporary `workers = 1` while
+Section 4 was in flight; it is now 3.)
 
 **Worker/DB ordering:** `Wants=` (not `Requires=`) `postgresql.service`, so a
 Postgres blip doesn't force-stop the app. On Ubuntu `postgresql.service` is a
@@ -221,18 +296,42 @@ voiceprofile`.
 back at `main` (`git checkout main && git pull`) so production doesn't sit on a
 feature branch.
 
+**Note:** the cutover now includes `venv/bin/flask db upgrade` applying the
+`otp_codes` migration (Section 4). The step is already in the runbook above.
+
+### Section 4 — Durable OTP + security hardening ✅
+
+- **OTP → PostgreSQL.** New `models/otp.py` (`otp_codes` table) + hand-written
+  migration `b7e2a91c4f08`. Rewrote `services/otp_service.py` to store an
+  HMAC-SHA256 hash of each code (keyed with `SECRET_KEY`), enforce a 5-attempt
+  limit, keep 5-minute expiry and single-use, and hold one active code per
+  phone. `auth/routes.py` unchanged (same `send_code` / `verify_code`).
+- **`SECRET_KEY` fail-loud** (`config.py`): refuses to start in production if
+  unset; throwaway default only under `FLASK_DEBUG=1`.
+- **Cookie hardening** (`config.py`): `HttpOnly`, `SameSite=Lax`, `Secure`
+  (off in debug).
+- **`ProxyFix`** (`app.py`): trusts one hop of `X-Forwarded-*` so scheme/host/IP
+  are correct behind the tunnel.
+- **`/healthz`** (`app.py`): `SELECT 1` readiness probe → 200 / 503.
+- **Bumped gunicorn workers 1 → 3** now that OTP is cross-worker-safe.
+
+Verified on the laptop: migration applies (head `b7e2a91c4f08`); an OTP test
+suite passes (hashing, wrong-code, single-use, 5-attempt lockout, expiry,
+one-code-per-phone); gunicorn boots 3 workers; `/` and `/healthz` return 200;
+`SECRET_KEY` unset in prod raises, dev fallback works.
+
 ---
 
 ## Open items
 
 - [x] **Section 3** — systemd unit built (`deploy/voiceprofile.service`) +
   cutover runbook written. **Server cutover still to be run on the box.**
-- [ ] **Section 4** — move OTP codes from the in-memory dict to PostgreSQL
-  (survives restarts + multiple workers), add attempt limiting; **then bump
-  gunicorn workers 1 → 3**; make `SECRET_KEY` fail loudly if unset; add
-  `/healthz`; harden session cookies.
+- [x] **Section 4** — OTP → Postgres (hashed, attempt-limited), `SECRET_KEY`
+  fail-loud, cookie hardening, `ProxyFix`, `/healthz`, workers bumped to 3.
 - [ ] **Section 5** — `pg_dump` backups on a timer; finalize the deploy runbook,
   including the from-scratch bootstrap note above.
+- [ ] **Server cutover** — run the Section 3 runbook on the box (now deploys
+  Section 4 too). Not yet done; server still on `flask run` + `main`.
 
 ### Resolved during setup
 

@@ -3,5 +3,6 @@
 # Imports all models for use in app
 from .profile import WorkerProfile
 from .review import Review
+from .otp import OTPCode
 
-__all__ = ["WorkerProfile", "Review"]
+__all__ = ["WorkerProfile", "Review", "OTPCode"]

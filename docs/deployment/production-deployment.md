@@ -434,15 +434,19 @@ creates `profiles`, `reviews`, `otp_codes` with their indexes.
   to the DGX, retention + restore procedure documented; from-scratch bootstrap
   note added.
 
-### Remaining — on the server (all build work is done)
+### Remaining
 
-- [ ] **Server cutover** — run the Section 3 cutover runbook on the box (also
-  applies the Section 4 OTP migration). Server is still on `flask run` + `main`.
-- [ ] **Backup setup** — run the Section 5 backup setup runbook (SSH key to DGX,
-  install units, test once, enable timer).
-- [ ] **Test restore** — do the scratch-DB restore once so recovery is proven.
-- [ ] **Push the branch** — `git push -u origin chore/production-deploy`, then
-  eventually merge to `main` so production doesn't sit on a feature branch.
+- [x] **Server cutover** — done. Production runs gunicorn under systemd
+  (`voiceprofile.service`, enabled) behind the tunnel; DB was nuked and rebuilt
+  from the clean initial migration; `/healthz` + the public site verified.
+- [x] **Backup setup** — done. `voiceprofile-backup.timer` runs nightly;
+  `pg_dump` copied off-box to the DGX at `/home/cato-user/backups/voiceprofile`
+  (home dir, since `/data` wasn't writable by `cato-user`). First dump verified
+  on the DGX.
+- [ ] **Test restore** — restore the latest dump into a scratch DB once to prove
+  recovery (commands under Section 5 → Restore procedure).
+- [ ] **Merge to `main`** — fold `chore/production-deploy` into `main` so
+  production tracks `main` again, then `git checkout main && git pull` on the box.
 
 ### Resolved during setup
 

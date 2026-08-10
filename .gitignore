@@ -19,6 +19,7 @@ helloworld.py
 *.md
 !CLAUDE.md
 !docs/**/*.md
+!whisper_service/**/*.md
 
 # Python bytecode
 __pycache__/

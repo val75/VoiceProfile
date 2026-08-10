@@ -1,0 +1,16 @@
+# Whisper service dependencies (DGX, CUDA 12.6).
+#
+# torch is a CUDA 12.6 wheel (+cu126) from PyTorch's index, NOT plain PyPI.
+# The --extra-index-url below pulls it and its matching nvidia-* CUDA packages.
+# It MUST match the DGX's installed CUDA toolkit. If the DGX's CUDA changes,
+# update the cu126 tag and the torch version together (see https://pytorch.org).
+--extra-index-url https://download.pytorch.org/whl/cu126
+
+# Web service
+fastapi==0.141.1
+uvicorn==0.52.1
+python-multipart==0.0.32      # required by FastAPI for UploadFile/File uploads
+
+# Speech-to-text (openai-whisper pulls numba, tiktoken, numpy, tqdm, etc.)
+openai-whisper==20250625
+torch==2.13.0+cu126

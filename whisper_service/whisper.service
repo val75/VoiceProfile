@@ -1,0 +1,34 @@
+# systemd unit for the Whisper transcription API. Runs on the DGX.
+#
+# Install:
+#   sudo cp whisper_service/whisper.service /etc/systemd/system/whisper.service
+#   # edit the <PLACEHOLDERS> below to match the DGX, then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now whisper
+#
+# See whisper_service/README.md for the full setup.
+
+[Unit]
+Description=Whisper transcription API (uvicorn) for VoiceProfile
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# The user that owns the checkout and venv (never root).
+User=cato-user
+
+# The whisper_service dir inside the repo checkout, so uvicorn imports app:app.
+WorkingDirectory=/home/cato-user/VoiceProfile/whisper_service
+
+# Absolute path to uvicorn inside the venv where the deps are installed.
+# Consider binding to the DGX private IP instead of 0.0.0.0 so the service
+# isn't reachable from any public interface (e.g. --host 192.168.100.2).
+ExecStart=/home/cato-user/VoiceProfile/whisper_service/venv/bin/uvicorn app:app --host 0.0.0.0 --port 6000
+
+Restart=on-failure
+RestartSec=5
+# whisper.load_model("medium") loads at startup and takes a while.
+TimeoutStartSec=180
+
+[Install]
+WantedBy=multi-user.target

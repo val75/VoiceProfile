@@ -47,4 +47,10 @@ def transcribe_audio(file_storage):
         raise SpeechToTextError(response.text)
 
     data = response.json()
+    if not isinstance(data, dict) or data.get("text") is None:
+        current_app.logger.error(
+            "Whisper returned an unexpected payload (HTTP %s): %r",
+            response.status_code, response.text[:1000],
+        )
+        raise SpeechToTextError("Whisper did not return a transcript")
     return data["text"]

@@ -1,3 +1,4 @@
+import logging
 import os
 
 from flask import Flask, render_template
@@ -16,6 +17,11 @@ from blueprints.reviews.routes import reviews_bp
 def create_app():
     myapp = Flask(__name__)
     myapp.config.from_object(Config)
+
+    # Flask's logger defaults to WARNING when not in debug, hiding logger.info
+    # output. Surface INFO in production too (journald captures stderr).
+    if not myapp.debug:
+        myapp.logger.setLevel(logging.INFO)
 
     # Behind Cloudflare Tunnel the app sees plain HTTP from cloudflared on
     # loopback. Trust one hop of X-Forwarded-* so request.is_secure, the URL

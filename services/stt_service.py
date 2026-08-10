@@ -19,11 +19,16 @@ def transcribe_audio(file_storage):
     whisper_url = current_app.config["WHISPER_URL"]
     api_key = current_app.config["WHISPER_API_KEY"]
 
+    audio_bytes = file_storage.read()
+    current_app.logger.info(
+        "Sending %d bytes to Whisper (filename=%r, mimetype=%r)",
+        len(audio_bytes), file_storage.filename, file_storage.mimetype,
+    )
     files = {
         "file": (
             file_storage.filename,
-            file_storage.stream,
-            file_storage.mimetype
+            audio_bytes,
+            file_storage.mimetype,
         )
     }
 

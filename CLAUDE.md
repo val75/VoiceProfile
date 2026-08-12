@@ -1,27 +1,45 @@
 # VoiceProfile
 
-Voice-based worker profile creation app. Users speak into a browser, audio is transcribed via Whisper, and structured profile data is extracted and stored.
+## Purpose
+
+Workers with limited literacy or typing ability **speak** into their phone browser to build a professional profile. Pipeline: voice → Whisper transcription → LLM extraction of structured data (work experience, availability) → worker reviews/edits → shareable profile with a QR code others can scan to leave reviews.
+
+- **Auth:** passwordless, phone number + OTP.
+- **Onboarding:** a voice state machine — `intro → name → name_confirm → story → availability → review → completed`. Each step records audio, transcribes it, and lets the worker confirm/edit before advancing.
+- **STT:** self-hosted Whisper API (`whisper_service/`, FastAPI + openai-whisper, runs on the DGX).
+- **Extraction:** local LLM via Ollama through the OpenAI SDK (`services/nlp_service.py`) — returns structured JSON (`work_experience[]`, `summary`, `availability`).
+- **Reviews:** owner gets a QR code linking to a public profile (`/p/<id>`) where anyone can leave a typed or voice review.
 
 ## Tech Stack
 
 - **Backend:** Flask 2.0+, Python 3.9+
 - **Database:** PostgreSQL with JSONB columns, SQLAlchemy ORM, Alembic migrations
-- **STT:** External Whisper API (self-hosted)
+- **STT:** Self-hosted Whisper API (vendored in `whisper_service/`)
+- **LLM:** Local Ollama (default `mistral:7b-instruct`) via OpenAI SDK
 - **Frontend:** Vanilla JS (ES6 classes), plain CSS, Web Audio API
+- **Serving:** gunicorn behind a Cloudflare Tunnel (see `deploy/`)
 
 ## Project Structure
 
 ```
-app.py                  # Flask app factory, blueprint registration
-config.py               # Config from environment variables
-models/profile.py       # WorkerProfile model (JSONB profile_data & transcripts)
-services/stt_service.py # Whisper API integration
-services/nlp_service.py # Profile data extraction (stub)
+app.py                    # Flask app factory, blueprint registration, healthz
+config.py                 # Config from environment variables
+models/
+  profile.py              # WorkerProfile (JSONB profile_data & transcripts, photo)
+  otp.py                  # OTP codes for phone auth
+  review.py               # Reviews left on a public profile
+services/
+  stt_service.py          # Whisper API integration
+  nlp_service.py          # LLM profile-data extraction (Ollama/OpenAI SDK)
+  otp_service.py          # OTP send/verify
+whisper_service/          # Self-hosted Whisper backend (FastAPI, runs on DGX)
 blueprints/
-  onboarding/           # Step-by-step voice onboarding (in progress)
-  voice_input/          # Standalone voice record & transcribe
-  profiles/             # Profile CRUD endpoints
-  profile_builder/      # Text-to-structured-data parsing
+  auth/                   # Phone + OTP login (no URL prefix)
+  onboarding/             # Voice onboarding state machine (/onboarding)
+  profiles/               # Profile view + QR code (/profiles)
+  reviews/                # Public profile + QR review submission (/p)
+  voice_input/            # Standalone voice record & transcribe (/voice)
+  profile_builder/        # Text-to-structured-data parsing (/builder)
 ```
 
 ## Running

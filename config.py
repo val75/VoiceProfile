@@ -36,6 +36,12 @@ class Config:
     LLM_MODEL = os.getenv("LLM_MODEL", "mistral:7b-instruct")
     LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", "30"))
 
+    # Twilio (SMS OTP delivery). If any of these is unset, OTP codes are logged
+    # instead of sent — so local dev and not-yet-configured envs still work.
+    TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
+    TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
+    TWILIO_FROM_NUMBER = os.getenv("TWILIO_FROM_NUMBER")
+
     # --- Session cookie hardening -----------------------------------------
     # HttpOnly: JS can't read the cookie (XSS mitigation).
     # SameSite=Lax: not sent on cross-site requests (CSRF mitigation).

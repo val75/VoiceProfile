@@ -433,6 +433,31 @@ creates `profiles`, `reviews`, `otp_codes` with their indexes.
 `flask db upgrade` builds the clean schema. (When `feat/i18n` merges later, its
 `locale` change returns properly as a new migration on top of this baseline.)
 
+### SMS OTP delivery (Twilio) ✅
+
+OTP codes are now sent by SMS via Twilio, not just logged — using the delivery
+seam left in `services/otp_service.py`.
+
+- `_deliver_code(phone, code)`: sends via Twilio when configured, else logs the
+  code (local dev / not-yet-configured). A Twilio failure raises `OTPError`,
+  which the login route already turns into a friendly "couldn't send" flash.
+- **Config** (`.env`): set all three to enable SMS; leave any unset to fall
+  back to logging.
+  ```
+  TWILIO_ACCOUNT_SID=ACxxxxxxxx
+  TWILIO_AUTH_TOKEN=xxxxxxxx
+  TWILIO_FROM_NUMBER=+1xxxxxxxxxx      # a Twilio number or approved sender ID
+  ```
+- `twilio==9.11.0` added to requirements.
+
+**Phone format — must be E.164** (`+40…`). Twilio rejects local formats like
+`07…`. Either collect numbers in E.164 at the login form or normalize before
+sending. Not yet handled — the number is passed through as entered.
+
+Verified: delivery unit tests pass (fallback logs without sending; configured
+path calls `messages.create` with the right `to`/`from_`/`body`; a Twilio error
+becomes `OTPError`).
+
 ---
 
 ## Open items

@@ -25,3 +25,6 @@ json-repair==0.44.1
 # Profile media + sharing
 Pillow==11.3.0
 qrcode[pil]==8.2
+
+# SMS OTP delivery
+twilio==9.11.0

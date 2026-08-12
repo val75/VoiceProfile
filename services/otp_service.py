@@ -31,11 +31,43 @@ def _hash_code(phone: str, code: str) -> str:
     return hmac.new(secret, msg, hashlib.sha256).hexdigest()
 
 
-def send_code(phone: str) -> str:
-    """Generate a 6-digit OTP, store its hash, log it, and return it.
+def _deliver_code(phone: str, code: str) -> None:
+    """Deliver the code to the user's phone.
 
-    The caller may surface the returned code in debug mode. Replacing the
-    print() with an SMS provider is the only change needed to go live.
+    Sends an SMS via Twilio when the TWILIO_* config is present; otherwise logs
+    the code (local dev, or an environment where SMS isn't configured yet).
+    Raises OTPError if Twilio is configured but the send fails, so the caller
+    can show a friendly "couldn't send" message.
+    """
+    cfg = current_app.config
+    sid = cfg.get("TWILIO_ACCOUNT_SID")
+    token = cfg.get("TWILIO_AUTH_TOKEN")
+    sender = cfg.get("TWILIO_FROM_NUMBER")
+
+    if not (sid and token and sender):
+        current_app.logger.info("[OTP STUB] Code for %s: %s", phone, code)
+        return
+
+    from twilio.rest import Client
+    from twilio.base.exceptions import TwilioRestException
+
+    try:
+        Client(sid, token).messages.create(
+            to=phone,
+            from_=sender,
+            body=f"Your VoiceProfile verification code is {code}",
+        )
+    except TwilioRestException as e:
+        current_app.logger.error("Twilio send failed for %s: %s", phone, e)
+        raise OTPError("Could not send verification code") from e
+
+
+def send_code(phone: str) -> str:
+    """Generate a 6-digit OTP, store its hash, deliver it, and return it.
+
+    Delivery goes through Twilio when configured, else the code is logged (dev
+    or not-yet-configured). The returned code is only surfaced by the caller in
+    debug mode.
     """
     code = str(secrets.randbelow(1_000_000)).zfill(6)
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=_CODE_TTL_MINUTES)
@@ -51,7 +83,7 @@ def send_code(phone: str) -> str:
     )
     db.session.commit()
 
-    print(f"[OTP STUB] Code for {phone}: {code}", flush=True)
+    _deliver_code(phone, code)
     return code
 
 

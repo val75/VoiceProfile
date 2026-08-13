@@ -51,12 +51,17 @@ def _deliver_code(phone: str, code: str) -> None:
     from twilio.rest import Client
     from twilio.base.exceptions import TwilioRestException
 
+    # `sender` may be a phone number (+1...) or a Messaging Service SID (MG...).
+    # US A2P 10DLC ties the number to a Messaging Service, so support both:
+    # an MG value routes through the Messaging Service, anything else is a from-number.
+    params = {"to": phone, "body": f"Your ShareGud verification code is {code}"}
+    if sender.startswith("MG"):
+        params["messaging_service_sid"] = sender
+    else:
+        params["from_"] = sender
+
     try:
-        Client(sid, token).messages.create(
-            to=phone,
-            from_=sender,
-            body=f"Your VoiceProfile verification code is {code}",
-        )
+        Client(sid, token).messages.create(**params)
     except TwilioRestException as e:
         current_app.logger.error("Twilio send failed for %s: %s", phone, e)
         raise OTPError("Could not send verification code") from e

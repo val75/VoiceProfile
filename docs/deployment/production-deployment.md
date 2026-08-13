@@ -446,9 +446,16 @@ seam left in `services/otp_service.py`.
   ```
   TWILIO_ACCOUNT_SID=ACxxxxxxxx
   TWILIO_AUTH_TOKEN=xxxxxxxx
-  TWILIO_FROM_NUMBER=+1xxxxxxxxxx      # a Twilio number or approved sender ID
+  TWILIO_FROM_NUMBER=+1xxxxxxxxxx      # a from-number, OR a Messaging Service SID (MGxxxx)
   ```
+  `_deliver_code` routes an `MG…` value via `messaging_service_sid` and anything
+  else via `from_`, so switching to a Messaging Service is an `.env` change only.
 - `twilio==9.11.0` added to requirements.
+
+**US A2P 10DLC:** sending from a US 10-digit number to US numbers requires 10DLC
+registration (Brand + Campaign, use case 2FA/OTP) with the number attached to a
+Messaging Service — otherwise carriers block it as "unregistered number". Once
+the Messaging Service is approved, set `TWILIO_FROM_NUMBER` to its `MG…` SID.
 
 **Phone format — must be E.164** (`+40…`). Twilio rejects local formats like
 `07…`. Either collect numbers in E.164 at the login form or normalize before

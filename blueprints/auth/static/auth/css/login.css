@@ -110,3 +110,29 @@ button[type="submit"]:active {
     margin-bottom: 20px;
     font-size: 14px;
 }
+
+/* SMS consent opt-in (A2P 10DLC). Overrides the bold block-label defaults. */
+.consent {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin: 0 0 20px;
+    font-weight: 400;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #6b7280;
+}
+
+.consent input[type="checkbox"] {
+    margin-top: 3px;
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    accent-color: #667eea;
+    cursor: pointer;
+}
+
+.consent a {
+    color: #667eea;
+    text-decoration: underline;
+}

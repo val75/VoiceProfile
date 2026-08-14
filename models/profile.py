@@ -17,6 +17,8 @@ class WorkerProfile(db.Model):
     onboarding_state = db.Column(db.String(50), default="intro")
     created_at = db.Column(db.DateTime, server_default=db.func.now())
     updated_at = db.Column(db.DateTime, server_default=db.func.now(), onupdate=db.func.now())
+    # When the user opted in to receive SMS verification codes (proof of consent).
+    sms_consent_at = db.Column(db.DateTime(timezone=True))
 
     # Flexible AI profile
     profile_data = db.Column(JSONB)

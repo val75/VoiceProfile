@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timezone
 
 from flask import render_template, request, redirect, url_for, session, flash, current_app
 
@@ -38,6 +39,11 @@ def login():
             flash("Please enter your phone number.")
             return render_template("auth/login.html")
 
+        # SMS consent is required before we send anything (A2P opt-in).
+        if not request.form.get("sms_consent"):
+            flash("Please agree to receive SMS verification codes to continue.")
+            return render_template("auth/login.html")
+
         try:
             code = send_code(phone)
         except OTPError as e:
@@ -46,6 +52,7 @@ def login():
             return render_template("auth/login.html")
 
         session["pending_phone"] = phone
+        session["sms_consent_at"] = datetime.now(timezone.utc).isoformat()
         if current_app.debug:
             session["debug_code"] = code
         return redirect(url_for("auth.verify"))
@@ -70,7 +77,12 @@ def verify():
         if not profile:
             profile = WorkerProfile(phone_number=phone)
             db.session.add(profile)
-            db.session.commit()
+
+        # Record the SMS consent captured at login (proof of opt-in).
+        consent_at = session.pop("sms_consent_at", None)
+        if consent_at:
+            profile.sms_consent_at = datetime.fromisoformat(consent_at)
+        db.session.commit()
 
         session.pop("pending_phone", None)
         session["profile_id"] = profile.id

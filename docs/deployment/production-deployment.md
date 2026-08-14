@@ -465,6 +465,32 @@ Verified: delivery unit tests pass (fallback logs without sending; configured
 path calls `messages.create` with the right `to`/`from_`/`body`; a Twilio error
 becomes `OTPError`).
 
+### SMS consent / opt-in (A2P 10DLC) ✅
+
+Carriers require a recorded opt-in before sending A2P SMS. Added a consent flow
+at the point of phone collection:
+
+- **Login page**: a required, unchecked consent checkbox with the CTIA-style
+  disclosure (purpose = verification codes, frequency varies, msg/data rates,
+  Reply STOP/HELP) and links to Terms and Privacy Policy.
+- **Server enforcement** (`auth/routes.py`): `login()` won't send an SMS unless
+  `sms_consent` is checked; the opt-in timestamp is captured in the session and
+  written to `profiles.sms_consent_at` when the profile is created/looked up in
+  `verify()`.
+- **Proof of consent**: new `sms_consent_at` column (migration `c3f81a92d5e0`).
+- **Public legal pages**: `/terms` and `/privacy` (unauthenticated), linked from
+  the opt-in and referenced in the 10DLC campaign registration. They ship as
+  **placeholders** carrying the carrier-required SMS clauses (esp. "we don't
+  sell/share numbers for marketing") — finalize the legal content + contact
+  details before submitting.
+
+Deploy: `flask db upgrade` applies `sms_consent_at`. For the 10DLC campaign, use
+`https://tryout.sharegud.com/terms` and `/privacy` as the opt-in/privacy URLs,
+and screenshot the login checkbox as the opt-in proof.
+
+Verified: consent flow tests pass (legal pages public; checkbox required
+server-side; no SMS without consent; consent recorded to session + DB path).
+
 ---
 
 ## Open items

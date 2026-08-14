@@ -67,6 +67,16 @@ def create_app():
     def home():
         return render_template('index.html')
 
+    # Public legal pages — linked from the SMS consent opt-in and referenced in
+    # the A2P 10DLC campaign registration. Must be reachable without login.
+    @myapp.route('/terms')
+    def terms():
+        return render_template('terms.html')
+
+    @myapp.route('/privacy')
+    def privacy():
+        return render_template('privacy.html')
+
     @myapp.route('/healthz')
     def healthz():
         """Readiness probe: 200 if the DB answers, 503 otherwise."""

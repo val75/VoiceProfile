@@ -43,6 +43,19 @@
             </div>
             <input type="hidden" name="phone" id="phone">
             <p class="hint">We'll send a 6-digit code to this number.</p>
+
+            <label class="consent">
+                <input type="checkbox" name="sms_consent" value="yes" required>
+                <span>
+                    I agree to receive SMS text messages (verification codes) from ShareGud
+                    at the number above. Message frequency varies. Message &amp; data rates may
+                    apply. Reply STOP to opt out, HELP for help. See our
+                    <a href="{{ url_for('terms') }}" target="_blank" rel="noopener">Terms</a>
+                    and
+                    <a href="{{ url_for('privacy') }}" target="_blank" rel="noopener">Privacy&nbsp;Policy</a>.
+                </span>
+            </label>
+
             <button type="submit">Send code</button>
         </form>
         <script>

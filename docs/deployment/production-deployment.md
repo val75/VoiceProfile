@@ -470,9 +470,10 @@ becomes `OTPError`).
 Carriers require a recorded opt-in before sending A2P SMS. Added a consent flow
 at the point of phone collection:
 
-- **Login page**: a required, unchecked consent checkbox with the CTIA-style
-  disclosure (purpose = verification codes, frequency varies, msg/data rates,
-  Reply STOP/HELP) and links to Terms and Privacy Policy.
+- **Login page**: a required, unchecked consent checkbox with a short disclosure
+  (verification codes, msg/data rates) and links to Terms and Privacy Policy. The
+  fuller CTIA details (message frequency, Reply STOP/HELP) live in the linked
+  Terms page ("SMS / Text Messaging" section).
 - **Server enforcement** (`auth/routes.py`): `login()` won't send an SMS unless
   `sms_consent` is checked; the opt-in timestamp is captured in the session and
   written to `profiles.sms_consent_at` when the profile is created/looked up in

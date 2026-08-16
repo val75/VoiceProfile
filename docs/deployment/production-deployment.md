@@ -457,9 +457,9 @@ registration (Brand + Campaign, use case 2FA/OTP) with the number attached to a
 Messaging Service — otherwise carriers block it as "unregistered number". Once
 the Messaging Service is approved, set `TWILIO_FROM_NUMBER` to its `MG…` SID.
 
-**Phone format — must be E.164** (`+40…`). Twilio rejects local formats like
-`07…`. Either collect numbers in E.164 at the login form or normalize before
-sending. Not yet handled — the number is passed through as entered.
+**Phone format — must be E.164.** Twilio rejects local/punctuated input. Now
+handled by server-side normalization at login (see "Phone number normalization"
+below).
 
 Verified: delivery unit tests pass (fallback logs without sending; configured
 path calls `messages.create` with the right `to`/`from_`/`body`; a Twilio error
@@ -490,6 +490,28 @@ and screenshot the login checkbox as the opt-in proof.
 
 Verified: consent flow tests pass (legal pages public; checkbox required
 server-side; no SMS without consent; consent recorded to session + DB path).
+
+### Phone number normalization ✅
+
+Real users type numbers naturally (`(650) 253-0000`, `650 253 0000`, a leading
+national `0`), but Twilio only accepts E.164 (`+16502530000`). Without cleanup
+those inputs fail at the SMS step and look like "SMS is broken".
+
+- `services/phone.py::normalize_phone` uses Google's libphonenumber
+  (`phonenumbers`) to parse, validate, and format to E.164 — stripping
+  punctuation and handling trunk-zero / `+` prefixes.
+- `login()` normalizes before consent/send; invalid input gets a clear "that
+  doesn't look like a valid phone number" message and never reaches Twilio (no
+  wasted SMS).
+- **Default region = `US`** (`PHONE_DEFAULT_REGION`, configurable). The MVP
+  launches in the US, so a bare national number is read as US; explicit
+  `+<country>` still works for international numbers. Change the env var to `RO`
+  (etc.) as the user base shifts — no code change.
+- `phonenumbers==9.0.37` added to requirements.
+
+Verified: unit + route tests pass (US variants collapse to one E.164; explicit
+`+CC` kept; garbage rejected before send; punctuated input normalized into
+`send_code`).
 
 ---
 

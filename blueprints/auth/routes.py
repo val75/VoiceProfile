@@ -7,6 +7,7 @@ from . import auth_bp
 from models.profile import WorkerProfile
 from extensions.database import db
 from services.otp_service import send_code, verify_code, OTPError
+from services.phone import normalize_phone
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,12 @@ def login():
         phone = request.form.get("phone", "").strip()
         if not phone:
             flash("Please enter your phone number.")
+            return render_template("auth/login.html")
+
+        # Normalize to E.164 (what Twilio requires) before doing anything else.
+        phone = normalize_phone(phone, current_app.config["PHONE_DEFAULT_REGION"])
+        if not phone:
+            flash("That doesn't look like a valid phone number. Please check and try again.")
             return render_template("auth/login.html")
 
         # SMS consent is required before we send anything (A2P opt-in).

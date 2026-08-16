@@ -42,6 +42,10 @@ class Config:
     TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
     TWILIO_FROM_NUMBER = os.getenv("TWILIO_FROM_NUMBER")
 
+    # Default region for parsing phone numbers with no explicit +country-code.
+    # US for the initial US-based MVP; change (e.g. "RO") as the user base shifts.
+    PHONE_DEFAULT_REGION = os.getenv("PHONE_DEFAULT_REGION", "US")
+
     # --- Session cookie hardening -----------------------------------------
     # HttpOnly: JS can't read the cookie (XSS mitigation).
     # SameSite=Lax: not sent on cross-site requests (CSRF mitigation).

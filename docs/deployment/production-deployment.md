@@ -450,6 +450,10 @@ seam left in `services/otp_service.py`.
   ```
   `_deliver_code` routes an `MG…` value via `messaging_service_sid` and anything
   else via `from_`, so switching to a Messaging Service is an `.env` change only.
+- **Pause sends without touching creds:** `OTP_DELIVERY=log` forces logging even
+  with Twilio configured (read codes from journald); `OTP_DELIVERY=auto`
+  (default) sends via Twilio when configured. Handy while a 10DLC campaign is
+  pending or for testing.
 - `twilio==9.11.0` added to requirements.
 
 **US A2P 10DLC:** sending from a US 10-digit number to US numbers requires 10DLC

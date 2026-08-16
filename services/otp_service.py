@@ -44,7 +44,10 @@ def _deliver_code(phone: str, code: str) -> None:
     token = cfg.get("TWILIO_AUTH_TOKEN")
     sender = cfg.get("TWILIO_FROM_NUMBER")
 
-    if not (sid and token and sender):
+    # OTP_DELIVERY=log forces logging even when Twilio is configured — handy for
+    # testing or while an A2P 10DLC campaign is still pending. "auto" (default)
+    # sends via Twilio when configured, otherwise logs.
+    if cfg.get("OTP_DELIVERY") == "log" or not (sid and token and sender):
         current_app.logger.info("[OTP STUB] Code for %s: %s", phone, code)
         return
 

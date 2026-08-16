@@ -42,6 +42,11 @@ class Config:
     TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
     TWILIO_FROM_NUMBER = os.getenv("TWILIO_FROM_NUMBER")
 
+    # OTP delivery mode: "auto" (send via Twilio when configured, else log the
+    # code) or "log" (always log, never send — for testing, or while an A2P
+    # campaign is still pending). Lets you keep Twilio creds set but pause sends.
+    OTP_DELIVERY = os.getenv("OTP_DELIVERY", "auto")
+
     # Default region for parsing phone numbers with no explicit +country-code.
     # US for the initial US-based MVP; change (e.g. "RO") as the user base shifts.
     PHONE_DEFAULT_REGION = os.getenv("PHONE_DEFAULT_REGION", "US")

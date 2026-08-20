@@ -8,6 +8,7 @@ from models.profile import WorkerProfile
 from extensions.database import db
 from services.otp_service import send_code, verify_code, OTPError
 from services.phone import normalize_phone
+from services.rate_limit import check_otp_rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,13 @@ def login():
         # SMS consent is required before we send anything (A2P opt-in).
         if not request.form.get("sms_consent"):
             flash("Please agree to receive SMS verification codes to continue.")
+            return render_template("auth/login.html")
+
+        # Rate-limit sends (SMS-bombing / Twilio cost abuse). request.remote_addr
+        # is the real client IP thanks to ProxyFix.
+        reason = check_otp_rate_limit(phone, request.remote_addr)
+        if reason:
+            flash(reason)
             return render_template("auth/login.html")
 
         try:

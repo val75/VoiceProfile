@@ -518,6 +518,26 @@ Verified: unit + route tests pass (US variants collapse to one E.164; explicit
 `+CC` kept; garbage rejected before send; punctuated input normalized into
 `send_code`).
 
+### OTP send rate limiting ✅
+
+`/auth/login` (send) had no limit — a public endpoint where each request costs
+a paid SMS, so someone could bomb a victim's number and burn budget. (Verify
+brute-force was already covered by the per-code 5-attempt limit.)
+
+- `services/rate_limit.py::check_otp_rate_limit(phone, ip)` — Postgres-backed
+  (no new infra; holds across the 3 gunicorn workers) via the `otp_requests`
+  table (migration `d4a7f2c9b810`). Three guards: a per-phone cooldown, a
+  per-phone hourly cap, and a per-IP hourly cap. Self-prunes rows past the
+  window. Returns a friendly flash reason when blocked; nothing is sent.
+- `login()` calls it after consent, before `send_code` (IP is the real client
+  via ProxyFix).
+- Tunable via env (defaults): `OTP_RESEND_COOLDOWN_SECONDS=60`,
+  `OTP_MAX_PER_PHONE_PER_HOUR=5`, `OTP_MAX_PER_IP_PER_HOUR=20`.
+
+Best-effort under high concurrency (no row lock) — fine for a pilot. Verified:
+cooldown, per-phone cap, per-IP cap, and stale-row pruning all pass (isolated
+SQLite).
+
 ---
 
 ## Open items

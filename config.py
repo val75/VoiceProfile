@@ -51,6 +51,11 @@ class Config:
     # US for the initial US-based MVP; change (e.g. "RO") as the user base shifts.
     PHONE_DEFAULT_REGION = os.getenv("PHONE_DEFAULT_REGION", "US")
 
+    # OTP send rate limiting (guards against SMS-bombing / Twilio cost abuse).
+    OTP_RESEND_COOLDOWN_SECONDS = int(os.getenv("OTP_RESEND_COOLDOWN_SECONDS", "60"))
+    OTP_MAX_PER_PHONE_PER_HOUR = int(os.getenv("OTP_MAX_PER_PHONE_PER_HOUR", "5"))
+    OTP_MAX_PER_IP_PER_HOUR = int(os.getenv("OTP_MAX_PER_IP_PER_HOUR", "20"))
+
     # --- Session cookie hardening -----------------------------------------
     # HttpOnly: JS can't read the cookie (XSS mitigation).
     # SameSite=Lax: not sent on cross-site requests (CSRF mitigation).

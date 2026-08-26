@@ -48,6 +48,7 @@ Rules:
 - Create one entry in "work_experience" for each distinct kind of work the person describes.
 - If the worker mentions the same kind of work more than once (for example naming it briefly and then describing it in detail), merge those into a single entry — do not duplicate.
 - "duration" is how long the person did THAT kind of work, and "duration_unit" is the unit they used. Capture the unit they actually said: "4 months" -> duration 4, duration_unit "months"; "2 years" -> duration 2, duration_unit "years"; "a couple weeks" -> duration 2, duration_unit "weeks".
+- "duration" MUST be a whole number. For a fractional length, use the smaller unit so the value stays whole: "a year and a half" -> duration 18, duration_unit "months"; "half a year" -> duration 6, duration_unit "months"; "two and a half years" -> duration 30, duration_unit "months". Never output a fractional duration like 1.5.
 - NEVER add up durations across entries: different jobs often overlap in time, so a combined total would be misleading.
 - Omit both "duration" and "duration_unit" when no length of time is given for that work.
 - For availability, create one entry in "schedule" for each day the worker can work. Use lowercase English day names ("monday" ... "sunday").

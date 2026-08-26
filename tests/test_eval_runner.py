@@ -66,6 +66,34 @@ def test_run_eval_averages_accuracy_across_cases():
     assert 0.0 < res["m1"]["accuracy_mean"] < 1.0
 
 
+def test_run_eval_emits_progress_events_per_case():
+    case2 = dict(CASE, id="en_case2")
+    events = []
+
+    def perfect(transcripts, model):
+        return dict(PERFECT_ACTUAL)
+
+    run_eval([CASE, case2], ["m1"], perfect, runs=1, on_event=events.append)
+
+    starts = [e for e in events if e["type"] == "case_start"]
+    assert [(e["case_index"], e["case_total"], e["id"]) for e in starts] == [
+        (1, 2, "en_case"),
+        (2, 2, "en_case2"),
+    ]
+    dones = [e for e in events if e["type"] == "case_done"]
+    assert dones[0]["accuracy"] == 1.0
+    assert all(e["model"] == "m1" for e in starts + dones)
+
+
+def test_run_eval_without_on_event_is_silent():
+    def perfect(transcripts, model):
+        return dict(PERFECT_ACTUAL)
+
+    # No callback -> must not raise.
+    res = run_eval([CASE], ["m1"], perfect, runs=1)
+    assert res["m1"]["accuracy_mean"] == 1.0
+
+
 def test_leaderboard_orders_by_accuracy_desc():
     results = {
         "weak": {"accuracy_mean": 0.30, "latency_mean_ms": 100, "failures": 2, "runs": 1},

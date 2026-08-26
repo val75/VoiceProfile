@@ -38,35 +38,50 @@ sys.path.insert(0, os.path.dirname(_HERE))
 from eval_scorer import score_case  # noqa: E402
 
 
-def run_eval(cases, models, extract_fn, runs=1):
+def run_eval(cases, models, extract_fn, runs=1, on_event=None):
     """Score every (model, case, run) and aggregate per model.
 
     extract_fn(transcripts, model) -> actual extraction dict, or raises on failure.
     A failed extraction counts toward `failures` and scores 0 for that run.
+    on_event(event) -> optional progress callback, called with dicts of type
+    "model_start", "case_start", and "case_done" (see main() for formatting).
     Returns {model: {accuracy_mean, latency_mean_ms, failures, runs, per_case}}.
     """
+    def emit(event):
+        if on_event is not None:
+            on_event(event)
+
     results = {}
-    for model in models:
+    for mi, model in enumerate(models, start=1):
+        emit({"type": "model_start", "model": model,
+              "model_index": mi, "model_total": len(models)})
         case_accuracies = []
         latencies_ms = []
         failures = 0
         per_case = []
 
-        for case in cases:
+        for ci, case in enumerate(cases, start=1):
+            emit({"type": "case_start", "model": model, "id": case["id"],
+                  "case_index": ci, "case_total": len(cases)})
             run_accuracies = []
+            case_ms = 0.0
             sample_actual = None
             sample_error = None
             for _ in range(runs):
                 start = time.perf_counter()
                 try:
                     actual = extract_fn(case["transcripts"], model)
-                    latencies_ms.append((time.perf_counter() - start) * 1000)
+                    elapsed = (time.perf_counter() - start) * 1000
+                    latencies_ms.append(elapsed)
+                    case_ms += elapsed
                     acc = score_case(case["expected"], actual)["accuracy"]
                     run_accuracies.append(acc)
                     if sample_actual is None:
                         sample_actual = actual
                 except Exception as e:  # noqa: BLE001 - any error is a scored failure
-                    latencies_ms.append((time.perf_counter() - start) * 1000)
+                    elapsed = (time.perf_counter() - start) * 1000
+                    latencies_ms.append(elapsed)
+                    case_ms += elapsed
                     failures += 1
                     run_accuracies.append(0.0)
                     sample_error = repr(e)
@@ -80,6 +95,10 @@ def run_eval(cases, models, extract_fn, runs=1):
                 "sample_actual": sample_actual,
                 "error": sample_error,
             })
+            emit({"type": "case_done", "model": model, "id": case["id"],
+                  "case_index": ci, "case_total": len(cases),
+                  "accuracy": case_acc, "failed": sample_error is not None,
+                  "elapsed_ms": case_ms})
 
         results[model] = {
             "accuracy_mean": statistics.mean(case_accuracies) if case_accuracies else 0.0,
@@ -168,13 +187,27 @@ def main(argv=None):
     def extract_fn(transcripts, model):
         return extract_profile_data(transcripts, model=model, base_url=args.base_url)
 
+    def log(event):
+        # Live progress to stderr, flushed so it appears during long extractions.
+        if event["type"] == "model_start":
+            print(f"\n[model {event['model_index']}/{event['model_total']}] "
+                  f"{event['model']}", file=sys.stderr, flush=True)
+        elif event["type"] == "case_start":
+            print(f"  case {event['case_index']}/{event['case_total']} "
+                  f"{event['id']} ...", file=sys.stderr, flush=True)
+        elif event["type"] == "case_done":
+            flag = "FAIL" if event["failed"] else f"acc {event['accuracy']:.3f}"
+            print(f"  case {event['case_index']}/{event['case_total']} "
+                  f"{event['id']} -> {flag} ({event['elapsed_ms'] / 1000:.1f}s)",
+                  file=sys.stderr, flush=True)
+
     app = create_app()
     with app.app_context():
         endpoint = args.base_url or current_app.config["LLM_URL"]
         print(f"Evaluating {len(models)} model(s) on {len(cases)} EN cases "
               f"({args.runs} run(s) each) against {endpoint} [label: {args.env}] ...",
-              file=sys.stderr)
-        results = run_eval(cases, models, extract_fn, runs=args.runs)
+              file=sys.stderr, flush=True)
+        results = run_eval(cases, models, extract_fn, runs=args.runs, on_event=log)
 
     md = format_report(args.env, results, cases)
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")

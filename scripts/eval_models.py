@@ -29,7 +29,12 @@ import sys
 import time
 from datetime import datetime, timezone
 
-sys.path.insert(0, os.path.dirname(__file__))
+# Make imports work regardless of cwd: running `python scripts/eval_models.py`
+# puts scripts/ on sys.path but NOT the repo root, so `import app`/`services`
+# would fail. Add both: scripts/ (for eval_scorer) and the repo root (for the app).
+_HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _HERE)
+sys.path.insert(0, os.path.dirname(_HERE))
 from eval_scorer import score_case  # noqa: E402
 
 

@@ -106,12 +106,16 @@ def _parse_json_response(content: str) -> dict:
     raise ExtractionError(f"Could not parse JSON from LLM response: {content[:200]}")
 
 
-def extract_profile_data(transcripts: dict) -> dict:
+def extract_profile_data(transcripts: dict, model: str = None, base_url: str = None) -> dict:
     """
     Extract structured profile data from onboarding transcripts using a local LLM.
 
     Args:
         transcripts: dict like {"name": "...", "story": "...", "availability": "..."}
+        model: override the configured LLM_MODEL (e.g. for the eval harness sweeping
+            candidate models). Defaults to config["LLM_MODEL"].
+        base_url: override the configured LLM_URL to target a different GPU host
+            (e.g. Lab/T4 vs Production/DGX-2). Defaults to config["LLM_URL"].
 
     Returns:
         Structured profile_data dict matching the JSONB schema.
@@ -121,10 +125,10 @@ def extract_profile_data(transcripts: dict) -> dict:
     """
     config = current_app.config
     client = OpenAI(
-        base_url=config["LLM_URL"],
+        base_url=base_url or config["LLM_URL"],
         api_key="ollama",
     )
-    model = config["LLM_MODEL"]
+    model = model or config["LLM_MODEL"]
     timeout = config["LLM_TIMEOUT"]
 
     user_prompt = _build_user_prompt(transcripts)

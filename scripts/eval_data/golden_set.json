@@ -1,0 +1,187 @@
+{
+  "_about": "EN-only golden set for the work-history extraction eval. Each case mirrors the real extraction schema (services/nlp_service.py SYSTEM_PROMPT) in `expected`. Scoring contract used by scripts/eval_models.py: work_experience entries are greedy-matched to expected by `category`, then `duration`/`duration_unit` are exact-matched ONLY when present in expected (so omission cases test presence of the entry, not a duration). availability.schedule days are set-F1'd; per matched day, start/end are exact-matched. `shift_preference` is exact-matched when present. `notes_contains` is a list of substrings that must appear in availability.notes (the day-less-hours fallback). Free-text fields (work_type, employer, context, summary) are reported by the scorer but NOT gated.",
+  "_normalization_notes": {
+    "year_and_half": "'a year and a half' has no clean integer years representation, so the expected value normalizes to 18 months. This is a deliberate discriminator: a strong model should capture the half; models that emit 1 year will miss on both duration and unit.",
+    "omitted_duration": "Cases with no stated length omit `duration`/`duration_unit` in expected; the scorer does not score those fields, so the case tests whether the work entry is produced at all."
+  },
+  "cases": [
+    {
+      "id": "en_uber_painting",
+      "language": "en",
+      "_covers": ["known-failure", "category-mapping (driving/construction)", "duration-idiom (a couple)", "day-less-hours notes fallback"],
+      "transcripts": {
+        "story": "I drove Uber for a couple years, and I painted houses for about a year.",
+        "availability": "I'm free from 9 in the morning to 5 in the afternoon."
+      },
+      "expected": {
+        "work_experience": [
+          {"category": "driving", "duration": 2, "duration_unit": "years"},
+          {"category": "construction", "duration": 1, "duration_unit": "years"}
+        ],
+        "availability": {
+          "schedule": [],
+          "notes_contains": ["9", "5"]
+        }
+      }
+    },
+    {
+      "id": "en_dishwasher_retail",
+      "language": "en",
+      "_covers": ["category-mapping (food_service/retail)", "multi-day shared hours (mon-fri)"],
+      "transcripts": {
+        "story": "I washed dishes at a restaurant for eight months, and I worked at a clothing store for two years.",
+        "availability": "I can work Monday through Friday from 8am to 4pm."
+      },
+      "expected": {
+        "work_experience": [
+          {"category": "food_service", "duration": 8, "duration_unit": "months"},
+          {"category": "retail", "duration": 2, "duration_unit": "years"}
+        ],
+        "availability": {
+          "schedule": [
+            {"day": "monday", "start": "08:00", "end": "16:00"},
+            {"day": "tuesday", "start": "08:00", "end": "16:00"},
+            {"day": "wednesday", "start": "08:00", "end": "16:00"},
+            {"day": "thursday", "start": "08:00", "end": "16:00"},
+            {"day": "friday", "start": "08:00", "end": "16:00"}
+          ]
+        }
+      }
+    },
+    {
+      "id": "en_duration_idioms",
+      "language": "en",
+      "_covers": ["duration-idiom (about six months, a couple weeks)", "vague shift -> shift_preference (mornings)"],
+      "transcripts": {
+        "story": "I worked in a warehouse for about six months, and I did some cleaning work for a couple weeks.",
+        "availability": "I prefer mornings."
+      },
+      "expected": {
+        "work_experience": [
+          {"category": "warehouse", "duration": 6, "duration_unit": "months"},
+          {"category": "cleaning", "duration": 2, "duration_unit": "weeks"}
+        ],
+        "availability": {
+          "schedule": [],
+          "shift_preference": "morning"
+        }
+      }
+    },
+    {
+      "id": "en_year_and_half",
+      "language": "en",
+      "_covers": ["duration-idiom discriminator (a year and a half -> 18 months)", "day-only schedule, no hours (weekend)"],
+      "transcripts": {
+        "story": "I did construction for a year and a half.",
+        "availability": "I can work Saturday and Sunday."
+      },
+      "expected": {
+        "work_experience": [
+          {"category": "construction", "duration": 18, "duration_unit": "months"}
+        ],
+        "availability": {
+          "schedule": [
+            {"day": "saturday"},
+            {"day": "sunday"}
+          ]
+        }
+      }
+    },
+    {
+      "id": "en_merge_same_job",
+      "language": "en",
+      "_covers": ["merge (same job named twice -> one entry)", "vague shift -> shift_preference (flexible)"],
+      "transcripts": {
+        "story": "I've done some driving. Basically I drove a delivery truck for three years.",
+        "availability": "My schedule is pretty flexible."
+      },
+      "expected": {
+        "work_experience": [
+          {"category": "driving", "duration": 3, "duration_unit": "years"}
+        ],
+        "availability": {
+          "schedule": [],
+          "shift_preference": "flexible"
+        }
+      }
+    },
+    {
+      "id": "en_maintenance_admin",
+      "language": "en",
+      "_covers": ["category-mapping (maintenance/admin)", "shared hours across two named days (fri+sat)"],
+      "transcripts": {
+        "story": "I fixed machines at a factory for five years, and I did office admin work for a year.",
+        "availability": "I'm available Friday and Saturday, 9am to 5pm."
+      },
+      "expected": {
+        "work_experience": [
+          {"category": "maintenance", "duration": 5, "duration_unit": "years"},
+          {"category": "admin", "duration": 1, "duration_unit": "years"}
+        ],
+        "availability": {
+          "schedule": [
+            {"day": "friday", "start": "09:00", "end": "17:00"},
+            {"day": "saturday", "start": "09:00", "end": "17:00"}
+          ]
+        }
+      }
+    },
+    {
+      "id": "en_day_less_hours",
+      "language": "en",
+      "_covers": ["pure day-less-hours notes fallback", "duration (three months)"],
+      "transcripts": {
+        "story": "I did cleaning work for three months.",
+        "availability": "I can work from 10 in the morning until 6 at night."
+      },
+      "expected": {
+        "work_experience": [
+          {"category": "cleaning", "duration": 3, "duration_unit": "months"}
+        ],
+        "availability": {
+          "schedule": [],
+          "notes_contains": ["10", "6"]
+        }
+      }
+    },
+    {
+      "id": "en_no_duration",
+      "language": "en",
+      "_covers": ["omitted duration (no length stated)", "vague shift -> shift_preference (nights)"],
+      "transcripts": {
+        "story": "I've done some warehouse work.",
+        "availability": "I like working nights."
+      },
+      "expected": {
+        "work_experience": [
+          {"category": "warehouse"}
+        ],
+        "availability": {
+          "schedule": [],
+          "shift_preference": "night"
+        }
+      }
+    },
+    {
+      "id": "en_three_categories",
+      "language": "en",
+      "_covers": ["broad category-mapping in one story (driving/construction/food_service)", "multiple durations, no merge"],
+      "transcripts": {
+        "story": "I drove Uber for two years, painted houses for six months, and washed dishes at a diner for a year.",
+        "availability": "I can do weekends, Saturday from 10am to 6pm."
+      },
+      "expected": {
+        "work_experience": [
+          {"category": "driving", "duration": 2, "duration_unit": "years"},
+          {"category": "construction", "duration": 6, "duration_unit": "months"},
+          {"category": "food_service", "duration": 1, "duration_unit": "years"}
+        ],
+        "availability": {
+          "schedule": [
+            {"day": "saturday", "start": "10:00", "end": "18:00"}
+          ]
+        }
+      }
+    }
+  ]
+}

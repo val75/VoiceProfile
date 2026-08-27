@@ -131,6 +131,7 @@ def extract_profile_data(transcripts: dict, model: str = None, base_url: str = N
     )
     model = model or config["LLM_MODEL"]
     timeout = config["LLM_TIMEOUT"]
+    max_tokens = config.get("LLM_MAX_TOKENS", 2048)
 
     user_prompt = _build_user_prompt(transcripts)
     last_error = None
@@ -146,6 +147,7 @@ def extract_profile_data(transcripts: dict, model: str = None, base_url: str = N
                 ],
                 temperature=0.1,
                 timeout=timeout,
+                max_tokens=max_tokens,
                 response_format={"type": "json_object"},
             )
 

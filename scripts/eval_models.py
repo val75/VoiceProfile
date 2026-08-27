@@ -169,6 +169,10 @@ def main(argv=None):
                         help="Path to the golden set JSON.")
     parser.add_argument("--runs", type=int, default=3,
                         help="Repeat each case N times (models are stochastic) and average.")
+    parser.add_argument("--timeout", type=int, default=120,
+                        help="Per-request LLM timeout (seconds). Defaults to 120 — generous "
+                             "for the eval, where production's short UX timeout would kill "
+                             "slower/bigger models mid-generation. Overrides config LLM_TIMEOUT.")
     parser.add_argument("--out-dir", default="scripts/eval_data",
                         help="Directory for the Markdown report.")
     args = parser.parse_args(argv)
@@ -202,10 +206,12 @@ def main(argv=None):
                   file=sys.stderr, flush=True)
 
     app = create_app()
+    app.config["LLM_TIMEOUT"] = args.timeout
     with app.app_context():
         endpoint = args.base_url or current_app.config["LLM_URL"]
         print(f"Evaluating {len(models)} model(s) on {len(cases)} EN cases "
-              f"({args.runs} run(s) each) against {endpoint} [label: {args.env}] ...",
+              f"({args.runs} run(s) each) against {endpoint} [label: {args.env}] "
+              f"(timeout {args.timeout}s) ...",
               file=sys.stderr, flush=True)
         results = run_eval(cases, models, extract_fn, runs=args.runs, on_event=log)
 

@@ -35,6 +35,11 @@ class Config:
     LLM_URL = os.getenv("LLM_URL", "http://localhost:11434/v1")
     LLM_MODEL = os.getenv("LLM_MODEL", "mistral:7b-instruct")
     LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", "30"))
+    # Hard cap on extraction output. The JSON we ask for is small (a verbose
+    # profile is well under ~600 tokens), so this only ever fires to stop a
+    # runaway/repetition loop — which otherwise hangs the request until the
+    # context limit and blows past LLM_TIMEOUT. Generous headroom vs. real need.
+    LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "2048"))
 
     # Twilio (SMS OTP delivery). If any of these is unset, OTP codes are logged
     # instead of sent — so local dev and not-yet-configured envs still work.

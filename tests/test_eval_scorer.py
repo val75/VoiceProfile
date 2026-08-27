@@ -53,6 +53,38 @@ def test_matched_category_wrong_duration_scores_partial():
     assert r["work"]["duration_unit_correct"] == 1
 
 
+def test_equivalent_duration_different_unit_scores_full():
+    # 12 months == 1 year: same real length, both integer-persistable -> full credit.
+    expected = {"work_experience": [{"category": "food_service", "duration": 1, "duration_unit": "years"}]}
+    actual = {"work_experience": [{"category": "food_service", "duration": 12, "duration_unit": "months"}]}
+
+    r = score_case(expected, actual)
+
+    assert r["work"]["duration_correct"] == 1
+    assert r["work"]["duration_unit_correct"] == 1
+
+
+def test_equivalent_duration_two_years_as_24_months():
+    expected = {"work_experience": [{"category": "driving", "duration": 2, "duration_unit": "years"}]}
+    actual = {"work_experience": [{"category": "driving", "duration": 24, "duration_unit": "months"}]}
+
+    r = score_case(expected, actual)
+
+    assert r["work"]["duration_correct"] == 1
+    assert r["work"]["duration_unit_correct"] == 1
+
+
+def test_non_equivalent_cross_unit_still_wrong():
+    # 1 year != 6 months: different real length -> not equivalent.
+    expected = {"work_experience": [{"category": "cleaning", "duration": 1, "duration_unit": "years"}]}
+    actual = {"work_experience": [{"category": "cleaning", "duration": 6, "duration_unit": "months"}]}
+
+    r = score_case(expected, actual)
+
+    assert r["work"]["duration_correct"] == 0
+    assert r["work"]["duration_unit_correct"] == 0
+
+
 def test_omitted_duration_in_expected_is_not_scored():
     # en_no_duration case: only the presence of the entry matters.
     expected = {"work_experience": [{"category": "warehouse"}]}

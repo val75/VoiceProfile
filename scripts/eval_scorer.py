@@ -7,6 +7,27 @@ contract is documented in scripts/eval_data/golden_set.json's `_about`.
 """
 
 
+def _duration_months(duration, unit):
+    """Convert a (duration, unit) pair to whole months, or None if not year/month.
+
+    Weeks don't map cleanly to months, so cross-unit equivalence is only defined
+    within the year/month family (the common case: '1 year' == '12 months').
+    """
+    if unit == "years":
+        return duration * 12
+    if unit == "months":
+        return duration
+    return None
+
+
+def _durations_equivalent(dur_a, unit_a, dur_b, unit_b):
+    """True if the two pairs represent the same real length (exact, or year<->month)."""
+    if dur_a == dur_b and unit_a == unit_b:
+        return True
+    ma, mb = _duration_months(dur_a, unit_a), _duration_months(dur_b, unit_b)
+    return ma is not None and mb is not None and ma == mb
+
+
 def _score_work(expected_entries, actual_entries):
     """Greedy-match expected work entries to actual by category, then score duration/unit.
 
@@ -29,13 +50,24 @@ def _score_work(expected_entries, actual_entries):
         remaining.remove(match)
         category_matched += 1
 
+        # A unit-equivalent pair (e.g. 12 months == 1 year) counts as correct on
+        # BOTH duration and unit: same real length, both integer-persistable.
+        pair_equiv = (
+            "duration" in exp and "duration_unit" in exp
+            and "duration" in match and "duration_unit" in match
+            and _durations_equivalent(
+                match["duration"], match["duration_unit"],
+                exp["duration"], exp["duration_unit"],
+            )
+        )
+
         if "duration" in exp:
             duration_scored += 1
-            if match.get("duration") == exp["duration"]:
+            if match.get("duration") == exp["duration"] or pair_equiv:
                 duration_correct += 1
         if "duration_unit" in exp:
             duration_unit_scored += 1
-            if match.get("duration_unit") == exp["duration_unit"]:
+            if match.get("duration_unit") == exp["duration_unit"] or pair_equiv:
                 duration_unit_correct += 1
 
     return {

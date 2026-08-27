@@ -56,6 +56,7 @@ Rules:
 - If the worker said the same hours apply to multiple days (e.g. "Friday and Saturday 9am to 5pm"), include the same start/end on EACH of those day entries — do not deduplicate the hours.
 - "shift_preference" is only for vague descriptors like "mornings" or "flexible". If you already captured specific start/end hours for the days the worker mentioned, OMIT "shift_preference".
 - Omit "schedule" entirely if no days were mentioned at all.
+- If the worker gives working hours but names NO day (e.g. "I can work from 10 in the morning until 6 at night"), do NOT invent days or schedule entries. Put the hours in "notes" instead (e.g. "notes": "Available 10am to 6pm"). Only create "schedule" entries for days the worker actually names.
 - If information is unclear or not mentioned, omit that field entirely rather than guessing.\
 """
 

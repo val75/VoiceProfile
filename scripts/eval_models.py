@@ -173,6 +173,10 @@ def main(argv=None):
                         help="Per-request LLM timeout (seconds). Defaults to 120 — generous "
                              "for the eval, where production's short UX timeout would kill "
                              "slower/bigger models mid-generation. Overrides config LLM_TIMEOUT.")
+    parser.add_argument("--json-mode", choices=["on", "off"], default="on",
+                        help="Send response_format=json_object (default on). Turn off for engines "
+                             "whose guided-decoding backend is broken (e.g. vLLM+outlines missing a "
+                             "dep); the model still emits JSON from the prompt.")
     parser.add_argument("--out-dir", default="scripts/eval_data",
                         help="Directory for the Markdown report.")
     args = parser.parse_args(argv)
@@ -207,11 +211,12 @@ def main(argv=None):
 
     app = create_app()
     app.config["LLM_TIMEOUT"] = args.timeout
+    app.config["LLM_JSON_MODE"] = args.json_mode
     with app.app_context():
         endpoint = args.base_url or current_app.config["LLM_URL"]
         print(f"Evaluating {len(models)} model(s) on {len(cases)} EN cases "
               f"({args.runs} run(s) each) against {endpoint} [label: {args.env}] "
-              f"(timeout {args.timeout}s) ...",
+              f"(timeout {args.timeout}s, json_mode {args.json_mode}) ...",
               file=sys.stderr, flush=True)
         results = run_eval(cases, models, extract_fn, runs=args.runs, on_event=log)
 

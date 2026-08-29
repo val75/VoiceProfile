@@ -108,6 +108,25 @@ def _parse_json_response(content: str) -> dict:
     raise ExtractionError(f"Could not parse JSON from LLM response: {content[:200]}")
 
 
+def _completion_kwargs(model, messages, timeout, max_tokens, json_mode):
+    """Build kwargs for chat.completions.create.
+
+    response_format=json_object is included only when json_mode is on. Some serving
+    engines can't honor it (e.g. vLLM whose outlines guided-decoding backend is
+    missing a transitive dep), so it must be omittable — see config LLM_JSON_MODE.
+    """
+    kwargs = {
+        "model": model,
+        "messages": messages,
+        "temperature": 0.1,
+        "timeout": timeout,
+        "max_tokens": max_tokens,
+    }
+    if json_mode:
+        kwargs["response_format"] = {"type": "json_object"}
+    return kwargs
+
+
 def extract_profile_data(transcripts: dict, model: str = None, base_url: str = None) -> dict:
     """
     Extract structured profile data from onboarding transcripts using a local LLM.
@@ -133,23 +152,20 @@ def extract_profile_data(transcripts: dict, model: str = None, base_url: str = N
     model = model or config["LLM_MODEL"]
     timeout = config["LLM_TIMEOUT"]
     max_tokens = config.get("LLM_MAX_TOKENS", 2048)
+    json_mode = str(config.get("LLM_JSON_MODE", "on")).lower() == "on"
 
     user_prompt = _build_user_prompt(transcripts)
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": user_prompt},
+    ]
     last_error = None
 
     # One retry on failure
     for attempt in range(2):
         try:
             response = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": user_prompt},
-                ],
-                temperature=0.1,
-                timeout=timeout,
-                max_tokens=max_tokens,
-                response_format={"type": "json_object"},
+                **_completion_kwargs(model, messages, timeout, max_tokens, json_mode)
             )
 
             content = response.choices[0].message.content

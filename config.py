@@ -40,6 +40,11 @@ class Config:
     # runaway/repetition loop — which otherwise hangs the request until the
     # context limit and blows past LLM_TIMEOUT. Generous headroom vs. real need.
     LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "2048"))
+    # Whether to request response_format=json_object. On for Ollama (honors it
+    # reliably). Can be turned off for engines whose guided-decoding backend is
+    # broken/unavailable (e.g. vLLM+outlines with a missing transitive dep); the
+    # model still emits JSON from the prompt, and _parse_json_response cleans up.
+    LLM_JSON_MODE = os.getenv("LLM_JSON_MODE", "on")
 
     # Twilio (SMS OTP delivery). If any of these is unset, OTP codes are logged
     # instead of sent — so local dev and not-yet-configured envs still work.

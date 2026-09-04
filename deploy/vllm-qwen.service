@@ -1,0 +1,74 @@
+# systemd unit for the vLLM server (Qwen2.5-32B extraction model) on the DGX-2.
+#
+# This is the LLM backend for profile extraction. The app server's .env points
+# LLM_URL at this server (http://<DGX>:8000/v1) and LLM_MODEL=qwen2.5-32b.
+#
+# Install on the DGX-2:
+#   sudo cp deploy/vllm-qwen.service /etc/systemd/system/vllm-qwen.service
+#   # edit the <PLACEHOLDERS> below (GPU pin especially) to match the box, then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now vllm-qwen
+#   journalctl -u vllm-qwen -f    # watch startup; ready at "Uvicorn running on http://0.0.0.0:8000"
+#
+# Prereqs (see tasks/vllm-eval-plan.md for the full recipe):
+#   - ~/vllm-venv with the Volta-compatible pin: vllm 0.6.3.post1 + torch 2.4.0 + transformers 4.45.2
+#   - a REAL pyairports installed (mirror-bypass), or vLLM 500s on every request (it imports
+#     outlines->pyairports unconditionally, even though we run json_mode off and never constrain)
+#   - Qwen/Qwen2.5-32B-Instruct fully pre-downloaded into the HF cache
+
+[Unit]
+Description=vLLM server - Qwen2.5-32B extraction model (VoiceProfile)
+After=network-online.target
+Wants=network-online.target
+# Don't thrash reloading a 64GB model: cap restarts to 3 within 10 minutes.
+StartLimitIntervalSec=600
+StartLimitBurst=3
+
+[Service]
+Type=simple
+# Unprivileged user that owns ~/vllm-venv and the HF cache - never root.
+User=cato-user
+Group=cato-user
+WorkingDirectory=/home/cato-user
+
+# --- Environment ---------------------------------------------------------
+# V100 (Volta) has no FlashAttention kernels; force the xformers backend.
+Environment=VLLM_ATTENTION_BACKEND=XFORMERS
+# Pin the GPUs this server may use so it never collides with Whisper / other
+# tenants. Set to 4 GPUs NOT used by Whisper; the count must equal
+# --tensor-parallel-size below.  <PLACEHOLDER: adjust device ids>
+Environment=CUDA_VISIBLE_DEVICES=0,1,2,3
+# Serve from the local HF cache only - no network dependency at boot. Requires
+# the model to be fully pre-downloaded (huggingface-cli download ...).
+Environment=HF_HUB_OFFLINE=1
+
+# The model server. --served-model-name must match the app's LLM_MODEL.
+# --dtype float16 (NOT bfloat16 - Volta has no native bf16).
+ExecStart=/home/cato-user/vllm-venv/bin/vllm serve Qwen/Qwen2.5-32B-Instruct \
+    --served-model-name qwen2.5-32b \
+    --host 0.0.0.0 \
+    --port 8000 \
+    --tensor-parallel-size 4 \
+    --dtype float16
+
+# Restart on crash, but not in a tight loop (see StartLimit* above).
+Restart=on-failure
+RestartSec=15
+
+# Loading 64GB across 4 GPUs takes minutes; releasing VRAM on stop takes a
+# while too. Give the tensor-parallel workers room, and kill the whole group
+# so no worker is orphaned holding GPU memory.
+TimeoutStartSec=600
+TimeoutStopSec=120
+KillMode=mixed
+
+# Common limits for GPU/NCCL serving (many fds; pinned host memory).
+LimitNOFILE=65536
+LimitMEMLOCK=infinity
+
+# Light hardening. PrivateTmp is intentionally OMITTED: multi-GPU workers use
+# shared memory / file-based IPC that tmp sandboxing can disrupt.
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

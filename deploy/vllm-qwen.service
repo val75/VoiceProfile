@@ -39,7 +39,13 @@ Environment=VLLM_ATTENTION_BACKEND=XFORMERS
 # --tensor-parallel-size below.  <PLACEHOLDER: adjust device ids>
 Environment=CUDA_VISIBLE_DEVICES=1,2,3,4
 # Serve from the local HF cache only - no network dependency at boot. Requires
-# the model to be fully pre-downloaded (huggingface-cli download ...).
+# the model fully pre-downloaded AND HF_HOME pointing at the cache that holds it.
+# systemd's env is NOT your shell's, so set HF_HOME explicitly - don't rely on
+# $HOME, or offline mode won't find the cache. On this box the weights live on a
+# custom volume (/data/huggingface), NOT the default ~/.cache/huggingface.
+# Verify with: find /data /home -type d -name 'models--Qwen--Qwen2.5-32B-Instruct'
+# HF_HOME is the dir that contains hub/.
+Environment=HF_HOME=/data/huggingface
 Environment=HF_HUB_OFFLINE=1
 
 # The model server. --served-model-name must match the app's LLM_MODEL.

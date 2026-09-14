@@ -37,7 +37,7 @@ Environment=VLLM_ATTENTION_BACKEND=XFORMERS
 # Pin the GPUs this server may use so it never collides with Whisper / other
 # tenants. Set to 4 GPUs NOT used by Whisper; the count must equal
 # --tensor-parallel-size below.  <PLACEHOLDER: adjust device ids>
-Environment=CUDA_VISIBLE_DEVICES=0,1,2,3
+Environment=CUDA_VISIBLE_DEVICES=1,2,3,4
 # Serve from the local HF cache only - no network dependency at boot. Requires
 # the model to be fully pre-downloaded (huggingface-cli download ...).
 Environment=HF_HUB_OFFLINE=1

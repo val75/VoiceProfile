@@ -35,6 +35,17 @@ class Config:
     LLM_URL = os.getenv("LLM_URL", "http://localhost:11434/v1")
     LLM_MODEL = os.getenv("LLM_MODEL", "mistral:7b-instruct")
     LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", "30"))
+    # Hard cap on extraction output, as a secondary guard against a runaway/
+    # repetition loop (LLM_TIMEOUT is the primary one). A normal profile's JSON is
+    # well under ~600 tokens; 4096 leaves ample headroom so even an unusually long
+    # multi-job transcript isn't truncated mid-JSON (which would fail parsing),
+    # while still bounding a loop far below the context limit. Tune via env.
+    LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "4096"))
+    # Whether to request response_format=json_object. On for Ollama (honors it
+    # reliably). Can be turned off for engines whose guided-decoding backend is
+    # broken/unavailable (e.g. vLLM+outlines with a missing transitive dep); the
+    # model still emits JSON from the prompt, and _parse_json_response cleans up.
+    LLM_JSON_MODE = os.getenv("LLM_JSON_MODE", "on")
 
     # Twilio (SMS OTP delivery). If any of these is unset, OTP codes are logged
     # instead of sent — so local dev and not-yet-configured envs still work.

@@ -48,6 +48,7 @@ Rules:
 - Create one entry in "work_experience" for each distinct kind of work the person describes.
 - If the worker mentions the same kind of work more than once (for example naming it briefly and then describing it in detail), merge those into a single entry — do not duplicate.
 - "duration" is how long the person did THAT kind of work, and "duration_unit" is the unit they used. Capture the unit they actually said: "4 months" -> duration 4, duration_unit "months"; "2 years" -> duration 2, duration_unit "years"; "a couple weeks" -> duration 2, duration_unit "weeks".
+- "duration" MUST be a whole number. For a fractional length, use the smaller unit so the value stays whole: "a year and a half" -> duration 18, duration_unit "months"; "half a year" -> duration 6, duration_unit "months"; "two and a half years" -> duration 30, duration_unit "months". Never output a fractional duration like 1.5.
 - NEVER add up durations across entries: different jobs often overlap in time, so a combined total would be misleading.
 - Omit both "duration" and "duration_unit" when no length of time is given for that work.
 - For availability, create one entry in "schedule" for each day the worker can work. Use lowercase English day names ("monday" ... "sunday").
@@ -55,6 +56,7 @@ Rules:
 - If the worker said the same hours apply to multiple days (e.g. "Friday and Saturday 9am to 5pm"), include the same start/end on EACH of those day entries — do not deduplicate the hours.
 - "shift_preference" is only for vague descriptors like "mornings" or "flexible". If you already captured specific start/end hours for the days the worker mentioned, OMIT "shift_preference".
 - Omit "schedule" entirely if no days were mentioned at all.
+- If the worker gives working hours but names NO day (e.g. "I can work from 10 in the morning until 6 at night"), do NOT invent days or schedule entries. Put the hours in "notes" instead (e.g. "notes": "Available 10am to 6pm"). Only create "schedule" entries for days the worker actually names.
 - If information is unclear or not mentioned, omit that field entirely rather than guessing.\
 """
 
@@ -106,12 +108,35 @@ def _parse_json_response(content: str) -> dict:
     raise ExtractionError(f"Could not parse JSON from LLM response: {content[:200]}")
 
 
-def extract_profile_data(transcripts: dict) -> dict:
+def _completion_kwargs(model, messages, timeout, max_tokens, json_mode):
+    """Build kwargs for chat.completions.create.
+
+    response_format=json_object is included only when json_mode is on. Some serving
+    engines can't honor it (e.g. vLLM whose outlines guided-decoding backend is
+    missing a transitive dep), so it must be omittable — see config LLM_JSON_MODE.
+    """
+    kwargs = {
+        "model": model,
+        "messages": messages,
+        "temperature": 0.1,
+        "timeout": timeout,
+        "max_tokens": max_tokens,
+    }
+    if json_mode:
+        kwargs["response_format"] = {"type": "json_object"}
+    return kwargs
+
+
+def extract_profile_data(transcripts: dict, model: str = None, base_url: str = None) -> dict:
     """
     Extract structured profile data from onboarding transcripts using a local LLM.
 
     Args:
         transcripts: dict like {"name": "...", "story": "...", "availability": "..."}
+        model: override the configured LLM_MODEL (e.g. for the eval harness sweeping
+            candidate models). Defaults to config["LLM_MODEL"].
+        base_url: override the configured LLM_URL to target a different GPU host
+            (e.g. Lab/T4 vs Production/DGX-2). Defaults to config["LLM_URL"].
 
     Returns:
         Structured profile_data dict matching the JSONB schema.
@@ -121,27 +146,26 @@ def extract_profile_data(transcripts: dict) -> dict:
     """
     config = current_app.config
     client = OpenAI(
-        base_url=config["LLM_URL"],
+        base_url=base_url or config["LLM_URL"],
         api_key="ollama",
     )
-    model = config["LLM_MODEL"]
+    model = model or config["LLM_MODEL"]
     timeout = config["LLM_TIMEOUT"]
+    max_tokens = config.get("LLM_MAX_TOKENS", 2048)
+    json_mode = str(config.get("LLM_JSON_MODE", "on")).lower() == "on"
 
     user_prompt = _build_user_prompt(transcripts)
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": user_prompt},
+    ]
     last_error = None
 
     # One retry on failure
     for attempt in range(2):
         try:
             response = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": user_prompt},
-                ],
-                temperature=0.1,
-                timeout=timeout,
-                response_format={"type": "json_object"},
+                **_completion_kwargs(model, messages, timeout, max_tokens, json_mode)
             )
 
             content = response.choices[0].message.content

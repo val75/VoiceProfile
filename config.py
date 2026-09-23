@@ -35,11 +35,12 @@ class Config:
     LLM_URL = os.getenv("LLM_URL", "http://localhost:11434/v1")
     LLM_MODEL = os.getenv("LLM_MODEL", "mistral:7b-instruct")
     LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", "30"))
-    # Hard cap on extraction output. The JSON we ask for is small (a verbose
-    # profile is well under ~600 tokens), so this only ever fires to stop a
-    # runaway/repetition loop — which otherwise hangs the request until the
-    # context limit and blows past LLM_TIMEOUT. Generous headroom vs. real need.
-    LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "2048"))
+    # Hard cap on extraction output, as a secondary guard against a runaway/
+    # repetition loop (LLM_TIMEOUT is the primary one). A normal profile's JSON is
+    # well under ~600 tokens; 4096 leaves ample headroom so even an unusually long
+    # multi-job transcript isn't truncated mid-JSON (which would fail parsing),
+    # while still bounding a loop far below the context limit. Tune via env.
+    LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "4096"))
     # Whether to request response_format=json_object. On for Ollama (honors it
     # reliably). Can be turned off for engines whose guided-decoding backend is
     # broken/unavailable (e.g. vLLM+outlines with a missing transitive dep); the

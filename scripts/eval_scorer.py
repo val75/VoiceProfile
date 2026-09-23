@@ -20,10 +20,23 @@ def _duration_months(duration, unit):
     return None
 
 
+def _is_whole(x):
+    """True if x is a whole-number amount (int, or float with no fractional part)."""
+    return isinstance(x, (int, float)) and not isinstance(x, bool) and float(x).is_integer()
+
+
 def _durations_equivalent(dur_a, unit_a, dur_b, unit_b):
-    """True if the two pairs represent the same real length (exact, or year<->month)."""
+    """True if the two pairs represent the same real length (exact, or year<->month).
+
+    Cross-unit equivalence applies ONLY to whole-number durations: a fractional
+    value like 1.5 years is lossy in our pipeline (parseInt truncates it to 1 year
+    on save), so it must NOT be treated as equal to 18 months. This preserves the
+    golden set's whole-number discriminator (en_year_and_half).
+    """
     if dur_a == dur_b and unit_a == unit_b:
         return True
+    if not (_is_whole(dur_a) and _is_whole(dur_b)):
+        return False
     ma, mb = _duration_months(dur_a, unit_a), _duration_months(dur_b, unit_b)
     return ma is not None and mb is not None and ma == mb
 
@@ -132,7 +145,11 @@ def score_case(expected, actual):
     notes = {"scored": 0, "correct": 0}
     if "notes_contains" in exp_av:
         notes["scored"] = 1
-        haystack = (act_av.get("notes") or "").lower()
+        # notes should be a string; a non-string (list/dict) is valid JSON but wrong
+        # shape — treat as no match rather than crashing (which run_eval would
+        # miscount as an extraction failure).
+        notes_val = act_av.get("notes")
+        haystack = notes_val.lower() if isinstance(notes_val, str) else ""
         notes["correct"] = int(all(str(sub).lower() in haystack for sub in exp_av["notes_contains"]))
 
     # Overall accuracy: earned points over total scorable points. Each false-positive

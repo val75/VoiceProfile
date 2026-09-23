@@ -85,6 +85,31 @@ def test_non_equivalent_cross_unit_still_wrong():
     assert r["work"]["duration_unit_correct"] == 0
 
 
+def test_fractional_duration_is_not_equivalent_to_whole():
+    # "1.5 years" is lossy: parseInt truncates it to 1 year on save, so it must
+    # NOT get equivalence credit against the whole-number expected (18 months).
+    # This is the golden set's central discriminator (en_year_and_half).
+    expected = {"work_experience": [{"category": "construction", "duration": 18, "duration_unit": "months"}]}
+    actual = {"work_experience": [{"category": "construction", "duration": 1.5, "duration_unit": "years"}]}
+
+    r = score_case(expected, actual)
+
+    assert r["work"]["duration_correct"] == 0
+    assert r["work"]["duration_unit_correct"] == 0
+
+
+def test_non_string_notes_does_not_crash():
+    # A model returning notes as a list/dict (valid JSON, wrong shape) must not
+    # raise inside the scorer (which run_eval would miscount as an extraction failure).
+    expected = {"availability": {"notes_contains": ["9", "5"]}}
+    actual = {"availability": {"notes": ["available 9 to 5"]}}
+
+    r = score_case(expected, actual)  # must not raise
+
+    assert r["notes"]["scored"] == 1
+    assert r["notes"]["correct"] == 0
+
+
 def test_omitted_duration_in_expected_is_not_scored():
     # en_no_duration case: only the presence of the entry matters.
     expected = {"work_experience": [{"category": "warehouse"}]}

@@ -72,6 +72,10 @@ def run_eval(cases, models, extract_fn, runs=1, on_event=None):
                 try:
                     actual = extract_fn(case["transcripts"], model)
                     elapsed = (time.perf_counter() - start) * 1000
+                    # Only successful calls count toward the latency metric; a
+                    # failure/timeout elapsed would inflate it (and it's the
+                    # leaderboard's accuracy tiebreaker). case_ms tracks wall-clock
+                    # for the progress display and includes failed runs.
                     latencies_ms.append(elapsed)
                     case_ms += elapsed
                     acc = score_case(case["expected"], actual)["accuracy"]
@@ -79,9 +83,7 @@ def run_eval(cases, models, extract_fn, runs=1, on_event=None):
                     if sample_actual is None:
                         sample_actual = actual
                 except Exception as e:  # noqa: BLE001 - any error is a scored failure
-                    elapsed = (time.perf_counter() - start) * 1000
-                    latencies_ms.append(elapsed)
-                    case_ms += elapsed
+                    case_ms += (time.perf_counter() - start) * 1000
                     failures += 1
                     run_accuracies.append(0.0)
                     sample_error = repr(e)
@@ -97,7 +99,10 @@ def run_eval(cases, models, extract_fn, runs=1, on_event=None):
             })
             emit({"type": "case_done", "model": model, "id": case["id"],
                   "case_index": ci, "case_total": len(cases),
-                  "accuracy": case_acc, "failed": sample_error is not None,
+                  # "failed" = no run of this case succeeded. A case where some
+                  # runs failed but others succeeded is a partial result, not a
+                  # failure (sample_error is still surfaced in the report).
+                  "accuracy": case_acc, "failed": sample_actual is None,
                   "elapsed_ms": case_ms})
 
         results[model] = {

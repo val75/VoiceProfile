@@ -94,6 +94,39 @@ def test_run_eval_without_on_event_is_silent():
     assert res["m1"]["accuracy_mean"] == 1.0
 
 
+def test_all_failures_yield_zero_latency():
+    # Failed/timed-out calls must NOT count toward latency_mean_ms (it's the
+    # leaderboard's accuracy tiebreaker). A model that only fails has no
+    # successful-call latency, so the mean is 0.0 rather than ~timeout.
+    from services.nlp_service import ExtractionError
+
+    def boom(transcripts, model):
+        raise ExtractionError("timeout")
+
+    res = run_eval([CASE], ["m1"], boom, runs=2)
+
+    assert res["m1"]["failures"] == 2
+    assert res["m1"]["latency_mean_ms"] == 0.0
+
+
+def test_partial_success_not_flagged_failed():
+    # runs=2 where run 1 fails, run 2 succeeds -> the case is NOT a full failure.
+    state = {"n": 0}
+
+    def flaky(transcripts, model):
+        state["n"] += 1
+        if state["n"] == 1:
+            raise RuntimeError("transient")
+        return dict(PERFECT_ACTUAL)
+
+    events = []
+    run_eval([CASE], ["m1"], flaky, runs=2, on_event=events.append)
+
+    done = [e for e in events if e["type"] == "case_done"][0]
+    assert done["accuracy"] > 0.0
+    assert done["failed"] is False
+
+
 def test_leaderboard_orders_by_accuracy_desc():
     results = {
         "weak": {"accuracy_mean": 0.30, "latency_mean_ms": 100, "failures": 2, "runs": 1},

@@ -10,6 +10,10 @@ Flask-Babel==4.0.0
 
 # Database / ORM / migrations
 Flask-SQLAlchemy==3.1.1
+# Imported directly (app.py, models/profile.py). Must stay on 2.0.x: SQLAlchemy 2.1
+# switched the default driver for plain postgresql:// URLs from psycopg2 to psycopg 3,
+# which isn't installed — a fresh venv on 2.1 fails with "No module named 'psycopg'".
+SQLAlchemy==2.0.51
 Flask-Migrate==4.1.0
 alembic==1.16.5
 psycopg2-binary==2.9.11

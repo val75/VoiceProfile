@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Admin</title></head>
+<body>
+  <h1>Admin dashboard</h1>
+  <p>Signed in as: {% if admin %}{{ admin.email }}{% if admin.name %} ({{ admin.name }}){% endif %}{% else %}dev (local){% endif %}</p>
+  <form method="post" action="{{ url_for('admin.logout') }}">
+    <button type="submit">Log out</button>
+  </form>
+</body>
+</html>

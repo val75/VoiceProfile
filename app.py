@@ -1,22 +1,27 @@
 import logging
 import os
 
+import click
 from flask import Flask, render_template
 from sqlalchemy import text
 from werkzeug.middleware.proxy_fix import ProxyFix
 from config import Config
 from extensions.database import db, migrate
+from extensions.oauth import oauth
 from blueprints.auth.routes import auth_bp
 from blueprints.voice_input.routes import voice_input_bp
 from blueprints.profile_builder.routes import profile_builder_bp
 from blueprints.profiles.routes import profiles_bp
 from blueprints.onboarding.routes import onboarding_bp
 from blueprints.reviews.routes import reviews_bp
+from blueprints.admin.routes import admin_bp
 
 
-def create_app():
+def create_app(test_config=None):
     myapp = Flask(__name__)
     myapp.config.from_object(Config)
+    if test_config:
+        myapp.config.update(test_config)
 
     # Flask's logger defaults to WARNING when not in debug, hiding logger.info
     # output. Surface INFO in production too (journald captures stderr).
@@ -32,6 +37,27 @@ def create_app():
 
     db.init_app(myapp)
     migrate.init_app(myapp, db)
+    oauth.init_app(myapp)
+    # `oauth` is a module-global and create_app runs once per test. Authlib does
+    # NOT raise on a duplicate name: register() overwrites the config in
+    # `_registry`, but create_client() keeps returning the client cached in
+    # `_clients` from the first call -- so the new config is silently ignored.
+    # Register only once so the first app's config is the one that is live.
+    if "admin_idp" not in oauth._registry:
+        oauth.register(
+            name="admin_idp",
+            server_metadata_url=myapp.config["OIDC_DISCOVERY_URL"],
+            client_id=myapp.config["OIDC_CLIENT_ID"],
+            client_secret=myapp.config["OIDC_CLIENT_SECRET"],
+            client_kwargs={"scope": "openid email profile"},
+        )
+    if not myapp.debug and not all(
+        myapp.config.get(k) for k in ("OIDC_DISCOVERY_URL", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET")
+    ):
+        myapp.logger.warning(
+            "Admin login is not configured (OIDC_DISCOVERY_URL / OIDC_CLIENT_ID / "
+            "OIDC_CLIENT_SECRET unset); /admin/login will fail until they are set."
+        )
 
     myapp.register_blueprint(auth_bp)
     myapp.register_blueprint(voice_input_bp, url_prefix="/voice")
@@ -39,6 +65,7 @@ def create_app():
     myapp.register_blueprint(profiles_bp, url_prefix="/profiles")
     myapp.register_blueprint(onboarding_bp, url_prefix="/onboarding")
     myapp.register_blueprint(reviews_bp, url_prefix="/p")
+    myapp.register_blueprint(admin_bp)
 
     @myapp.cli.command("init-db")
     def init_db():
@@ -62,6 +89,48 @@ def create_app():
         db.drop_all()
         db.create_all()
         print("🔥 Database dropped and recreated successfully.")
+
+    @myapp.cli.command("add-admin")
+    @click.argument("email")
+    def add_admin_cmd(email):
+        """Provision an admin by email (identity links on first login)."""
+        from services.admin_service import add_admin
+        admin = add_admin(email)
+        if not admin.is_active:
+            raise click.ClickException(
+                f"Admin {admin.email} exists but is disabled; "
+                f"run `flask enable-admin {admin.email}` to re-enable."
+            )
+        print(f"✅ Admin provisioned: {admin.email} (id={admin.id})")
+
+    @myapp.cli.command("enable-admin")
+    @click.argument("email")
+    def enable_admin_cmd(email):
+        """Re-enable a disabled admin by email."""
+        from services.admin_service import enable_admin
+        admin = enable_admin(email)
+        if admin is None:
+            raise click.ClickException(f"No admin found for {email}")
+        print(f"✅ Admin enabled: {admin.email}")
+
+    @myapp.cli.command("disable-admin")
+    @click.argument("email")
+    def disable_admin_cmd(email):
+        """Disable an admin by email."""
+        from services.admin_service import disable_admin
+        admin = disable_admin(email)
+        if admin is None:
+            raise click.ClickException(f"No admin found for {email}")
+        print(f"🚫 Admin disabled: {admin.email}")
+
+    @myapp.cli.command("list-admins")
+    def list_admins_cmd():
+        """List all admins and their linked identities."""
+        from services.admin_service import list_admins
+        for a in list_admins():
+            status = "active" if a.is_active else "disabled"
+            issuers = ", ".join(i.issuer for i in a.identities) or "no identities yet"
+            print(f"{a.email:40} [{status}] {issuers}")
 
     @myapp.route('/')
     def home():

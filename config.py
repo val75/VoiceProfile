@@ -25,6 +25,11 @@ def _require_secret_key() -> str:
     )
 
 
+def _parse_admin_emails(raw: str) -> set:
+    """Parse ADMIN_EMAILS (comma-separated) into a lowercased set."""
+    return {e.strip().lower() for e in (raw or "").split(",") if e.strip()}
+
+
 class Config:
     DEBUG = _DEBUG
     SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL")
@@ -75,3 +80,11 @@ class Config:
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
     SESSION_COOKIE_SECURE = not _DEBUG
+
+    # --- Admin (OIDC) -----------------------------------------------------
+    OIDC_DISCOVERY_URL = os.getenv("OIDC_DISCOVERY_URL")
+    OIDC_CLIENT_ID = os.getenv("OIDC_CLIENT_ID")
+    OIDC_CLIENT_SECRET = os.getenv("OIDC_CLIENT_SECRET")
+    # Break-glass allowlist: these emails are always admins (auto-provisioned
+    # on first Google login), so the admin_users table can start empty.
+    ADMIN_EMAILS = _parse_admin_emails(os.getenv("ADMIN_EMAILS"))

@@ -186,6 +186,26 @@ A lightweight readiness probe at `/healthz` runs `SELECT 1` and returns `200
 uptime monitors, or a future load balancer a real signal that the app can serve
 requests, not just that the process is alive.
 
+### Admin login (Google OIDC)
+
+The `/admin` area signs in with Google (OpenID Connect via Authlib). Only the
+validated ID token's `email` + `email_verified` are trusted. Four env keys:
+
+- `OIDC_DISCOVERY_URL` — `https://accounts.google.com/.well-known/openid-configuration`
+- `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` — from the Google OAuth client below
+- `ADMIN_EMAILS` — comma-separated break-glass allowlist of admin emails
+
+One-time Google setup: Google Cloud Console → APIs & Services → Credentials →
+Create credentials → OAuth client ID → **Web application** → Authorized redirect
+URI `https://<your-domain>/admin/auth`. The callback URL is built from the
+request, so it only comes out as `https://` behind the Cloudflare Tunnel because
+of the ProxyFix above — if Google reports a `redirect_uri_mismatch`, check that.
+
+Manage admins with `flask add-admin|enable-admin|disable-admin <email>` and
+`flask list-admins`. Disabling (or deleting) an admin takes effect on their next
+request — existing sessions are revoked. The dev login shortcut (no Google) only
+works with `FLASK_DEBUG=1` from localhost; it never fires through the tunnel.
+
 ### Backups: pg_dump, off-box copies, tested restores
 
 `pg_dump` writes a single point-in-time snapshot of the whole database — schema

@@ -35,3 +35,6 @@ twilio==9.11.0
 
 # Phone number parsing/validation to E.164
 phonenumbers==9.0.37
+
+# Admin auth (OIDC)
+Authlib==1.6.12

@@ -56,7 +56,7 @@ def create_app(test_config=None):
     ):
         myapp.logger.warning(
             "Admin login is not configured (OIDC_DISCOVERY_URL / OIDC_CLIENT_ID / "
-            "OIDC_CLIENT_SECRET unset); /admin/login will fail until they are set."
+            "OIDC_CLIENT_SECRET unset); admin login will fail until they are set."
         )
 
     myapp.register_blueprint(auth_bp)
@@ -65,7 +65,7 @@ def create_app(test_config=None):
     myapp.register_blueprint(profiles_bp, url_prefix="/profiles")
     myapp.register_blueprint(onboarding_bp, url_prefix="/onboarding")
     myapp.register_blueprint(reviews_bp, url_prefix="/p")
-    myapp.register_blueprint(admin_bp)
+    myapp.register_blueprint(admin_bp, url_prefix=myapp.config["ADMIN_URL_PREFIX"])
 
     @myapp.cli.command("init-db")
     def init_db():

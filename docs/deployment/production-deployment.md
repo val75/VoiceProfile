@@ -188,16 +188,21 @@ requests, not just that the process is alive.
 
 ### Admin login (Google OIDC)
 
-The `/admin` area signs in with Google (OpenID Connect via Authlib). Only the
-validated ID token's `email` + `email_verified` are trusted. Four env keys:
+The admin area signs in with Google (OpenID Connect via Authlib). Only the
+validated ID token's `email` + `email_verified` are trusted. Env keys:
 
 - `OIDC_DISCOVERY_URL` — `https://accounts.google.com/.well-known/openid-configuration`
 - `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` — from the Google OAuth client below
 - `ADMIN_EMAILS` — comma-separated break-glass allowlist of admin emails
+- `ADMIN_URL_PREFIX` (optional, default `/admin`) — where the admin area is
+  mounted. The repo is public, so set a non-obvious path here per host rather
+  than in code. This only keeps scanners away; Google login + the allowlist
+  are what actually gate access. Below, `<prefix>` means this value.
 
 One-time Google setup: Google Cloud Console → APIs & Services → Credentials →
 Create credentials → OAuth client ID → **Web application** → Authorized redirect
-URI `https://<your-domain>/admin/auth`. The callback URL is built from the
+URI `https://<your-domain><prefix>/auth`. Changing `ADMIN_URL_PREFIX` changes
+this URI, so update it in Google at the same time. The callback URL is built from the
 request, so it only comes out as `https://` behind the Cloudflare Tunnel because
 of the ProxyFix above — if Google reports a `redirect_uri_mismatch`, check that.
 

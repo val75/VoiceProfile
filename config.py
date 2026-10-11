@@ -30,6 +30,12 @@ def _parse_admin_emails(raw: str) -> set:
     return {e.strip().lower() for e in (raw or "").split(",") if e.strip()}
 
 
+def _parse_admin_url_prefix(raw: str) -> str:
+    """Normalize ADMIN_URL_PREFIX to "/segment"; blank or "/" -> "/admin"."""
+    path = (raw or "").strip().strip("/")
+    return f"/{path}" if path else "/admin"
+
+
 class Config:
     DEBUG = _DEBUG
     SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL")
@@ -88,3 +94,7 @@ class Config:
     # Break-glass allowlist: these emails are always admins (auto-provisioned
     # on first Google login), so the admin_users table can start empty.
     ADMIN_EMAILS = _parse_admin_emails(os.getenv("ADMIN_EMAILS"))
+    # Where the admin area is mounted. Set per host in .env (the repo is
+    # public) so the real path isn't published; obscurity only — access is
+    # still gated by Google login + the admin allowlist.
+    ADMIN_URL_PREFIX = _parse_admin_url_prefix(os.getenv("ADMIN_URL_PREFIX"))

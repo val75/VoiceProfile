@@ -563,6 +563,76 @@ Best-effort under high concurrency (no row lock) — fine for a pilot. Verified:
 cooldown, per-phone cap, per-IP cap, and stale-row pruning all pass (isolated
 SQLite).
 
+### Admin login (Google OIDC) ✅ (follow-ups open)
+
+Admin area with Google sign-in (see "Admin login (Google OIDC)" under Concepts):
+`admin_users` + `admin_identities` (migration `d213e5e9336f`), `ADMIN_EMAILS`
+break-glass allowlist, `flask add-admin|enable-admin|disable-admin|list-admins`.
+Mounted at `ADMIN_URL_PREFIX` (set per host; the real path is deliberately not
+written in this public repo — `<prefix>` below). Live on laptop, lab and
+production since 2026-10-14; real Google login verified on lab and production,
+`/admin/` returns 404 where a custom prefix is set.
+
+#### Follow-up A — Cloudflare Access in front of the admin path (not done)
+
+A second, independent gate: Cloudflare asks for an emailed one-time PIN before
+any request under `<prefix>` reaches Flask, so the admin area is invisible to
+the internet even if the app had a bug. Free on the Zero Trust plan, no code
+change. It can't be bypassed because the origin is only reachable through the
+tunnel (gunicorn on `127.0.0.1:5001`, port not publicly bound).
+
+1. Cloudflare dashboard → **Zero Trust → Access → Applications → Add an
+   application → Self-hosted**. Name `VoiceProfile admin`; session duration
+   e.g. 24h.
+2. **Destination:** domain `tryout.sharegud.com`, path `<prefix>` (no leading
+   slash; covers everything under it, including the Google callback
+   `<prefix>/auth` — the browser already holds the Access cookie by then).
+3. **Policy:** action *Allow*, include → *Emails* → the admin addresses.
+   Login method *One-time PIN* (default), or add Google as an Access identity
+   provider.
+4. **Verify:**
+   - `curl -sI https://tryout.sharegud.com/<prefix>/` → `302` to
+     `https://<team>.cloudflareaccess.com/...` (not to `<prefix>/login`)
+   - `curl -s https://tryout.sharegud.com/healthz` → ok (worker paths untouched)
+   - browser: PIN email → Google sign-in → dashboard.
+
+Trade-off: admin emails then live in two places (`ADMIN_EMAILS`/`admin_users`
+**and** the Access policy) — adding an admin means updating both. Optional
+later hardening: verify the `Cf-Access-Jwt-Assertion` header in Flask.
+
+#### Follow-up B — non-OAuth callback errors return 500, not 403 (minor)
+
+`blueprints/admin/routes.py` `auth()` catches only `OAuthError` around
+`authorize_access_token()`. Two other failure classes escape as a 500:
+
+- `authlib.jose` errors (`JoseError`, e.g. `InvalidClaimError`) from ID-token
+  validation — nonce mismatch, or clock skew past Authlib's leeway. `JoseError`
+  is **not** an `OAuthError` subclass.
+- Network errors (`requests.RequestException`) calling Google's token or JWKS
+  endpoint.
+
+Fails closed (no session is set) — the only harm is a 500 page and a traceback
+in the journal. Fix: catch `authlib.common.errors.AuthlibBaseError` (base of
+both `OAuthError` and `JoseError`) plus `requests.RequestException`, log the
+class name, render `not_authorized.html` with 403; add one test per class.
+
+#### Follow-up C — dev-login loopback check trusts `X-Forwarded-For` (minor)
+
+`login()` grants the no-Google dev session when `current_app.debug` and
+`request.remote_addr` is loopback. With `ProxyFix(x_for=1)`, `remote_addr` is
+taken from the last `X-Forwarded-For` value sent by *whoever connects*, so with
+`FLASK_DEBUG=1` **and** the app bound to a non-loopback interface (e.g.
+`flask run --host 0.0.0.0` on a LAN), a LAN client sending
+`X-Forwarded-For: 127.0.0.1` gets admin without Google.
+
+Not reachable on lab or production (`FLASK_DEBUG=0`, gunicorn on loopback,
+Cloudflare supplies the real client IP). Until fixed: never combine
+`FLASK_DEBUG=1` with a non-loopback `--host`. Fix: also require the direct
+socket peer to be loopback —
+`request.environ.get("werkzeug.proxy_fix.orig", {}).get("REMOTE_ADDR", request.remote_addr)`
+— plus a test that a spoofed header from a non-loopback peer gets the Google
+redirect.
+
 ---
 
 ## Open items
@@ -588,6 +658,10 @@ SQLite).
   recovery (commands under Section 5 → Restore procedure).
 - [ ] **Merge to `main`** — fold `chore/production-deploy` into `main` so
   production tracks `main` again, then `git checkout main && git pull` on the box.
+- [ ] **Cloudflare Access on the admin path** — Admin login, Follow-up A.
+- [ ] **Admin callback: non-OAuth errors → 403** — Admin login, Follow-up B.
+- [ ] **Dev-login loopback check vs. `X-Forwarded-For`** — Admin login,
+  Follow-up C.
 
 ### Resolved during setup
 

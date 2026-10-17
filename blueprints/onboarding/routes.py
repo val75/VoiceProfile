@@ -35,6 +35,13 @@ QUESTIONS = {
     'availability': "What days and hours are you available to work?",
 }
 
+# Status line under the record button before the worker taps it.
+RECORD_PROMPTS = {
+    'name':         "Tap the green button to record your name.",
+    'story':        "Tap the green button to record your work story.",
+    'availability': "Tap the green button to record when you can work.",
+}
+
 # Ordered steps (excluding name_confirm which is an intermediate state)
 VOICE_STEPS = ["name", "story", "availability"]
 
@@ -166,6 +173,7 @@ def name_step(profile_id):
         "onboarding/record_question.html",
         question_id='name',
         question_text = QUESTIONS['name'],
+        record_prompt=RECORD_PROMPTS['name'],
         # Pass profile_id so the template can POST to the right transcribe URL.
         transcribe_url=url_for('onboarding.name_transcribe', profile_id=profile.id)
     )
@@ -323,6 +331,7 @@ def voice_step(profile_id, step):
         question_id=step,
         question_text=QUESTIONS[step],
         question_hint=None,
+        record_prompt=RECORD_PROMPTS[step],
         max_seconds=STEP_MAX_SECONDS.get(step),
         transcribe_url=url_for("onboarding.voice_transcribe", profile_id=profile.id, step=step),
         is_last_step=(step == GENERIC_STEPS[-1]),

@@ -32,33 +32,32 @@
             <div class="bar"></div>
         </div>
 
-        <div class="controls">
-            <button id="record">
-                <span>🎙️</span>
-                <span id="recordText">Record</span>
-            </button>
-            <button id="stop" disabled>
-                <span>⏹</span>
-                <span>Stop</span>
-            </button>
-            <button id="send" disabled>
-                <span>📤</span>
-                <span>Send</span>
-            </button>
+        <div class="status-container">
+            <p id="status" aria-live="polite">{{ record_prompt or 'Ready to record' }}</p>
         </div>
 
-        <div class="status-container">
-            <p id="status">Ready to record</p>
+        <!-- One button that always shows the next step: Record → Stop → Transcribe -->
+        <div class="controls" id="controls">
+            <button id="recordBtn" type="button" data-state="idle">
+                <span id="recordIcon" class="record-icon" aria-hidden="true"></span>
+                <span id="recordLabel">Record</span>
+            </button>
+            <button id="againBtn" type="button" hidden>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V2L7 6l5 4V7a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z"/></svg>
+                <span>Record again</span>
+            </button>
         </div>
 
         <!-- Confirmation panel — hidden until transcription succeeds -->
         <div id="confirmPanel" role="region" aria-live="polite">
             <span id="heardLabel">We heard</span>
-            <span id="heardName"></span>
+            <div id="heardText"></div>
             <div class="confirm-buttons">
-                <button id="btnConfirm">✓ That's right</button>
-                <button id="btnEdit" style="display:none">✏ Edit</button>
-                <button id="btnRetry">↩ Re-record</button>
+                <button id="btnConfirm" type="button">✓ That's right</button>
+                <div class="confirm-row">
+                    <button id="btnEdit" type="button">✏ Edit</button>
+                    <button id="btnRetry" type="button">↩ Re-record</button>
+                </div>
             </div>
         </div>
 

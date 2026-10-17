@@ -1,13 +1,38 @@
 /**
  * VoiceRecorder - Manages audio recording functionality
+ *
+ * One button drives the whole take, and its label, icon and color always
+ * show the next step:
+ *
+ *   idle ──tap──▶ recording ──tap/time limit──▶ recorded ──tap──▶ sending
+ *    ▲                                            │                 │
+ *    └──────────────── Record again ──────────────┘   error ◀───────┘
+ *                                                  (back to recorded)
  */
 
 (function(window) {
   'use strict';
 
+  const ICONS = {
+    mic:  '<svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg>',
+    stop: '<svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>',
+    text: '<svg viewBox="0 0 24 24"><path d="M4 3h16a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H9l-5 4v-4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm2 4v2h12V7H6zm0 4v2h8v-2H6z"/></svg>',
+    spinner: '<span class="spinner"></span>'
+  };
+
+  // Idle status comes from the page (a per-question prompt), so it's not here.
+  const STATES = {
+    idle:      { label: 'Record',        icon: ICONS.mic },
+    recording: { label: 'Stop',          icon: ICONS.stop,    status: 'Recording… tap Stop when you finish.' },
+    recorded:  { label: 'Transcribe',    icon: ICONS.text,    status: 'Done! Tap Transcribe, or record again.' },
+    sending:   { label: 'Transcribing…', icon: ICONS.spinner, status: 'Turning your words into text…' }
+  };
+
   class VoiceRecorder {
     /**
-     * @param {object} elements  - DOM element refs (unchanged)
+     * @param {object} elements  - DOM element refs: status, recordBtn,
+     *                             recordIcon, recordLabel, againBtn, controls,
+     *                             timer, visualizer, bars
      * @param {object} [options] - Optional config:
      *   options.transcribeUrl  {string}   - POST endpoint. Falls back to the
      *                                       hidden #transcribeUrl field, then
@@ -15,7 +40,7 @@
      *   options.onSuccess      {function} - Called with the parsed JSON response
      *                                       after a successful transcription.
      *                                       When provided, the caller owns the
-     *                                       status message for that case.
+     *                                       screen until it calls reset().
      */
     constructor(elements, options = {}) {
       this.elements = elements;
@@ -26,6 +51,7 @@
       this.recordingStartTime = null;
       this.lastDurationMs = null;   // length of the last finished recording
       this.timerInterval = null;
+      this.idleStatus = elements.status.textContent;
 
       this.visualizer = new window.AudioVisualizer(
         elements.visualizer,
@@ -33,6 +59,7 @@
       );
 
       this.bindEvents();
+      this.setState('idle');
     }
 
     // ------------------------------------------------------------------
@@ -71,9 +98,30 @@
     }
 
     bindEvents() {
-      this.elements.recordBtn.onclick = () => this.startRecording();
-      this.elements.stopBtn.onclick = () => this.stopRecording();
-      this.elements.sendBtn.onclick = () => this.sendRecording();
+      this.elements.recordBtn.onclick = () => {
+        if (this.state === 'idle') this.startRecording();
+        else if (this.state === 'recording') this.stopRecording();
+        else if (this.state === 'recorded') this.sendRecording();
+      };
+      this.elements.againBtn.onclick = () => this.reset();
+    }
+
+    // ------------------------------------------------------------------
+    // Single place that updates the button and status for a state.
+    // `message` overrides the state's default status line.
+    // ------------------------------------------------------------------
+    setState(state, message, type = '') {
+      const s = STATES[state];
+      const btn = this.elements.recordBtn;
+
+      this.state = state;
+      btn.dataset.state = state;
+      btn.disabled = state === 'sending';
+      this.elements.recordIcon.innerHTML = s.icon;
+      this.elements.recordLabel.textContent = s.label;
+      this.elements.againBtn.hidden = state !== 'recorded';
+      this.elements.timer.classList.toggle('live', state === 'recording');
+      this.updateStatus(message ?? s.status ?? this.idleStatus, type);
     }
 
     updateStatus(message, type = '') {
@@ -147,6 +195,8 @@
     }
 
     async startRecording() {
+      // Block double taps while the browser asks for the microphone.
+      this.elements.recordBtn.disabled = true;
       this.updateStatus('Requesting microphone access...', '');
       this.audioChunks = [];
 
@@ -168,46 +218,33 @@
         };
 
         this.mediaRecorder.onstart = () => {
-          this.elements.recordBtn.disabled = true;
-          this.elements.recordBtn.classList.add('recording');
-          this.elements.recordText.textContent = 'Recording...';
-          this.elements.stopBtn.disabled = false;
-          this.elements.sendBtn.disabled = true;
-          this.updateStatus('Recording in progress...', '');
+          this.setState('recording');
           this.startTimer();
           this.visualizer.start(stream);
         };
 
         this.mediaRecorder.onstop = () => {
-          this.elements.recordBtn.disabled = false;
-          this.elements.recordBtn.classList.remove('recording');
-          this.elements.recordText.textContent = 'Record';
-          this.elements.stopBtn.disabled = true;
-          this.elements.sendBtn.disabled = false;
           this.stopTimer();
           this.visualizer.stop();
-
-          if (this.mediaStream) {
-            this.mediaStream.getTracks().forEach(track => track.stop());
-            this.mediaStream = null;
-          }
-
-          const duration = this.elements.timer.textContent;
-          this.updateStatus(`Recording complete (${duration})`, 'success');
+          this.releaseStream();
+          this.setState('recorded');
         };
 
         this.mediaRecorder.onerror = (e) => {
           console.error('MediaRecorder error:', e);
-          this.updateStatus('Recording error occurred', 'error');
           this.cleanup();
+          this.setState('idle', 'Recording error occurred', 'error');
         };
 
         this.mediaRecorder.start(100);
 
       } catch (err) {
         console.error('Failed to start recording:', err);
-        this.updateStatus(`Error: ${err.message}`, 'error');
         this.cleanup();
+        const message = err.name === 'NotAllowedError'
+          ? 'The microphone is blocked. Allow it in your browser settings, then tap Record.'
+          : `Error: ${err.message}`;
+        this.setState('idle', message, 'error');
       }
     }
 
@@ -219,12 +256,11 @@
 
     async sendRecording() {
       if (!this.audioChunks.length) {
-        this.updateStatus('No audio recorded', 'error');
+        this.setState('idle', 'No audio recorded', 'error');
         return;
       }
 
-      this.elements.sendBtn.disabled = true;
-      this.updateStatus('Uploading and transcribing...', '');
+      this.setState('sending');
 
       try {
         const mimeType = this.mediaRecorder?.mimeType || 'audio/webm';
@@ -247,60 +283,56 @@
           body: formData
         });
 
-        if (!response.ok) {
-          throw new Error(`Server error: ${response.status}`);
-        }
-
-        const data = await response.json();
-
-        if (data.error) {
-          this.updateStatus(`Error: ${data.error}`, 'error');
-          this.elements.sendBtn.disabled = false;
-          return;
+        // Error bodies are JSON ({"error": ...}) for 4xx/502; anything else is a server fault.
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || data.error) {
+          throw new Error(data.error || `Server error: ${response.status}`);
         }
 
         // If a caller-supplied callback exists, hand off the response and
         // let it own the next steps (e.g. showing a confirmation panel).
         if (typeof this.options.onSuccess === 'function') {
+          this.elements.controls.hidden = true;
           this.options.onSuccess(data);
         } else {
           // Default behaviour: show the plain transcription text.
-          if (data.text) {
-            this.updateStatus(`Transcription: "${data.text}"`, 'success');
-          } else {
-            this.updateStatus('Transcription complete', 'success');
-          }
-          this.elements.sendBtn.disabled = false;
+          this.reset();
+          this.updateStatus(
+            data.text ? `Transcription: "${data.text}"` : 'Transcription complete',
+            'success'
+          );
         }
 
-        // Reset audio buffer and timer for a potential re-record.
-        this.audioChunks = [];
-        this.elements.timer.textContent = '00:00';
-
       } catch (err) {
-        console.error('Upload failed:', err);
-        this.updateStatus(`Upload failed: ${err.message}`, 'error');
-        this.elements.sendBtn.disabled = false;
+        // Keep the take so the worker can retry without recording again.
+        console.error('Transcription failed:', err);
+        this.setState('recorded', "Couldn't turn that into text. Tap Transcribe to try again.", 'error');
+      }
+    }
+
+    // ------------------------------------------------------------------
+    // Throw the take away and show the Record button again. Also used by
+    // callers (the confirm panel's Re-record) after onSuccess.
+    // ------------------------------------------------------------------
+    reset() {
+      this.audioChunks = [];
+      this.elements.timer.textContent = '00:00';
+      this.elements.controls.hidden = false;
+      this.setState('idle');
+    }
+
+    releaseStream() {
+      if (this.mediaStream) {
+        this.mediaStream.getTracks().forEach(track => track.stop());
+        this.mediaStream = null;
       }
     }
 
     cleanup() {
       this.stopTimer();
       this.visualizer.stop();
-
-      if (this.mediaStream) {
-        this.mediaStream.getTracks().forEach(track => track.stop());
-        this.mediaStream = null;
-      }
-
-      if (this.mediaRecorder) {
-        this.mediaRecorder = null;
-      }
-
-      this.elements.recordBtn.disabled = false;
-      this.elements.recordBtn.classList.remove('recording');
-      this.elements.recordText.textContent = 'Record';
-      this.elements.stopBtn.disabled = true;
+      this.releaseStream();
+      this.mediaRecorder = null;
     }
   }
 

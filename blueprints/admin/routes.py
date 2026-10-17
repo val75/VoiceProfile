@@ -1,22 +1,33 @@
 import io
+from datetime import datetime
 
 from authlib.integrations.flask_client import OAuthError
 from flask import (
-    abort, session, redirect, url_for, render_template, current_app, request, send_file,
+    abort, flash, session, redirect, url_for, render_template, current_app, request, send_file,
 )
 
 from extensions.database import db
 from extensions.oauth import oauth
+from models.profile import WorkerProfile
 from models.recording import VoiceRecording
 from . import admin_bp
 from .decorators import DEV_ADMIN, admin_required, current_admin
 from services.admin_service import resolve_admin
+from services.profile_service import (
+    STATUSES, delete_confirmation_code, delete_profile, profile_counts, profile_footprint,
+    search_profiles, status_label,
+)
 from services.recording_service import DECISIONS, FilterError, build_filters, search_takes
-from services.timezones import admin_zone, to_admin_local
+from services.timezones import admin_zone, db_local_to_admin, db_zone, to_admin_local
 from services.webm import with_duration
 
 _LOOPBACK = ("127.0.0.1", "::1")
 PAGE_SIZE = 50
+MAX_PAGE = 10_000  # far past any real list; keeps OFFSET from overflowing
+
+
+def _page_number(args) -> int:
+    return min(max(args.get("page", 1, type=int), 1), MAX_PAGE)
 
 # Types an <audio> element plays. The stored type comes from the worker's upload,
 # so anything else is served as opaque bytes and can never render on this origin.
@@ -126,3 +137,54 @@ def recording_audio(take_id):
     resp.headers["X-Content-Type-Options"] = "nosniff"
     resp.headers["Content-Security-Policy"] = "sandbox"
     return resp
+
+
+@admin_bp.route("/profiles")
+@admin_required
+def profiles():
+    """All worker profiles: bookkeeping columns and counts, never profile content."""
+    args = request.args
+    filters = {k: args.get(k, "").strip() for k in ("q", "status", "reviews")}
+    error, page = None, None
+    try:
+        query = search_profiles(**filters)
+    except FilterError as e:
+        error = str(e)
+    else:
+        page = query.paginate(page=_page_number(args), per_page=PAGE_SIZE, error_out=False)
+    zone = db_zone()
+    return render_template(
+        "admin/profiles.html",
+        counts=profile_counts(), page=page, error=error, args=filters,
+        base_args={k: v for k, v in filters.items() if v}, statuses=STATUSES,
+        status_label=status_label, local=lambda dt: db_local_to_admin(dt, zone),
+        zone_name=str(admin_zone()), now=datetime.now(admin_zone()),
+    )
+
+
+@admin_bp.route("/profiles/<int:profile_id>/delete", methods=["GET", "POST"])
+@admin_required
+def profile_delete(profile_id):
+    """Confirm, then delete a profile and everything tied to it (as `flask profile delete`)."""
+    profile = db.session.get(WorkerProfile, profile_id)
+    if profile is None:
+        abort(404)
+    phone_known = delete_confirmation_code(profile) != str(profile.id)
+    error = None
+    if request.method == "POST":
+        if request.form.get("confirm", "").strip() == delete_confirmation_code(profile):
+            counts = delete_profile(profile)
+            admin = current_admin()
+            # Ids and counts only: no name or phone in the log.
+            current_app.logger.info("Admin %s deleted profile %s via web: %s",
+                                    admin.id if admin else DEV_ADMIN, profile_id, counts)
+            flash(f"Deleted profile {profile_id}.")
+            return redirect(url_for("admin.profiles"))
+        error = "That doesn't match. Nothing was deleted."
+    return render_template(
+        "admin/profile_delete.html",
+        profile=profile, footprint=profile_footprint(profile), error=error,
+        status=status_label(profile.onboarding_state),
+        created=db_local_to_admin(profile.created_at, db_zone()),
+        asks_for="the last 4 digits of the phone" if phone_known else "the profile ID",
+    ), (400 if error else 200)

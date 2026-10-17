@@ -1,9 +1,17 @@
-"""Admin-facing time zone helpers. Stored times are always UTC."""
+"""Admin-facing time zone helpers.
+
+timestamptz columns (voice recordings, OTP, admin tables) are UTC. The older
+naive columns (profiles, reviews) hold the database server's local time: see
+db_zone().
+"""
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Optional, Tuple
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from flask import current_app
+from sqlalchemy import text
+
+from extensions.database import db
 
 
 def resolve_zone(name: Optional[str]):
@@ -33,6 +41,25 @@ def as_utc(dt: datetime) -> datetime:
 
 def to_admin_local(dt: Optional[datetime]) -> Optional[datetime]:
     return None if dt is None else as_utc(dt).astimezone(admin_zone())
+
+
+def db_zone():
+    """Zone of the naive timestamps the database fills in with now() (profiles, reviews).
+
+    Postgres writes now() into a `timestamp without time zone` column in the
+    session's TimeZone, i.e. the server default (America/Los_Angeles on the
+    laptop's Postgres, often UTC on Linux); SQLite writes UTC.
+    """
+    if db.engine.dialect.name != "postgresql":
+        return timezone.utc
+    return resolve_zone(db.session.execute(text("SHOW TimeZone")).scalar())
+
+
+def db_local_to_admin(dt: Optional[datetime], zone) -> Optional[datetime]:
+    """A naive database-written value (in `zone`, see db_zone) in the admin zone."""
+    if dt is None:
+        return None
+    return to_admin_local(dt if dt.tzinfo else dt.replace(tzinfo=zone))
 
 
 def parse_day(value: Optional[str]) -> Optional[date]:

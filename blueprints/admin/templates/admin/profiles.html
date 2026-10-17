@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Profiles</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 24px; }
+    form.filters { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    form.filters .tz { margin-left: auto; font-size: 13px; color: #555; border: 1px dashed #bbb;
+                       border-radius: 4px; padding: 4px 10px; background: #f6f6f6; }
+    .tiles { display: flex; gap: 12px; flex-wrap: wrap; margin: 12px 0 16px; }
+    .tile { border: 1px solid #ddd; border-radius: 6px; padding: 10px 14px; min-width: 150px; }
+    .tile .n { font-size: 26px; font-weight: 600; }
+    .tile .l { font-size: 13px; color: #555; }
+    .tile .sub { font-size: 12px; color: #777; margin-top: 4px; }
+    table { border-collapse: collapse; width: 100%; font-size: 14px; margin-top: 12px; }
+    th, td { border-bottom: 1px solid #ddd; padding: 6px 8px; text-align: left; vertical-align: top; }
+    .error { color: #b00020; }
+    .ok { color: #1b6e2e; }
+    .muted { color: #777; }
+    .flash { background: #eef7ee; border: 1px solid #b7dcb7; padding: 6px 10px; }
+  </style>
+</head>
+<body>
+  <p><a href="{{ url_for('admin.dashboard') }}">&larr; Dashboard</a></p>
+  <h1>Worker profiles</h1>
+  {% for message in get_flashed_messages() %}<p class="flash">{{ message }}</p>{% endfor %}
+
+  <div class="tiles">
+    <div class="tile"><div class="n">{{ counts.total }}</div><div class="l">Total profiles</div></div>
+    <div class="tile"><div class="n ok">{{ counts.completed }}</div><div class="l">Completed</div></div>
+    <div class="tile"><div class="n">{{ counts.incomplete }}</div><div class="l">Incomplete</div>
+      {% if counts.stopped_at %}
+      <div class="sub">{% for step, n in counts.stopped_at.items() %}{{ step }} {{ n }}{% if not loop.last %} · {% endif %}{% endfor %}</div>
+      {% endif %}
+      {% if counts.extraction_errors %}
+      <div class="sub error">{{ counts.extraction_errors }} hit an extraction error</div>
+      {% endif %}
+    </div>
+    <div class="tile"><div class="n">{{ counts.with_reviews }}</div><div class="l">With reviews</div></div>
+  </div>
+
+  <form class="filters" method="get" action="{{ url_for('admin.profiles') }}">
+    <label>Name or phone <input name="q" value="{{ args.q }}" size="28"></label>
+    <label>Status
+      <select name="status">
+        <option value="">any</option>
+        {% for s in statuses %}
+        <option value="{{ s }}" {% if args.status == s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Reviews
+      <select name="reviews">
+        <option value="">any</option>
+        {% for value, label in (("has", "has reviews"), ("none", "no reviews")) %}
+        <option value="{{ value }}" {% if args.reviews == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit">Search</button>
+    <a href="{{ url_for('admin.profiles') }}">Clear</a>
+    <span class="tz">Timezone: {{ zone_name | replace('_', ' ') }} · now {{ now.strftime('%Y-%m-%d %H:%M') }}</span>
+  </form>
+
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+  {% if page %}
+    <p class="muted">{{ page.total }} profile{{ '' if page.total == 1 else 's' }}, newest first</p>
+    {% if page.items %}
+    <table>
+      <thead>
+        <tr><th>ID</th><th>Name</th><th>Phone</th><th>Status</th><th>Reviews</th>
+            <th>Recordings</th><th>Photo</th><th>Created</th><th>Last change</th><th></th></tr>
+      </thead>
+      <tbody>
+      {% for r in page.items %}
+        <tr>
+          <td>{{ r.id }}</td>
+          <td>{% if r.name %}{{ r.name }}{% else %}<span class="muted">(no name yet)</span>{% endif %}</td>
+          <td>{{ r.phone_number or '' }}</td>
+          <td>
+            {% set status = status_label(r.onboarding_state) %}
+            <span class="{{ 'ok' if status == 'completed' }}">{{ status }}</span>
+            {% if r.extraction_error and status != 'completed' %}<span class="error"> · extraction error</span>{% endif %}
+          </td>
+          <td>{{ r.review_count }}</td>
+          <td>
+            {% if r.recording_count and r.phone_number %}
+              <a href="{{ url_for('admin.recordings', phone=r.phone_number) }}">{{ r.recording_count }}</a>
+            {% else %}{{ r.recording_count }}{% endif %}
+          </td>
+          <td>{{ 'yes' if r.has_photo else 'no' }}</td>
+          <td>{% if r.created_at %}{{ local(r.created_at).strftime('%Y-%m-%d %H:%M') }}{% endif %}</td>
+          <td>{% if r.updated_at %}{{ local(r.updated_at).strftime('%Y-%m-%d %H:%M') }}{% endif %}</td>
+          <td><a href="{{ url_for('admin.profile_delete', profile_id=r.id) }}">Delete…</a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p>No profiles match.</p>
+    {% endif %}
+    <p>
+      {% if page.has_prev %}<a href="{{ url_for('admin.profiles', page=page.prev_num, **base_args) }}">&larr; Newer</a>{% endif %}
+      {% if page.has_next %}<a href="{{ url_for('admin.profiles', page=page.next_num, **base_args) }}">Older &rarr;</a>{% endif %}
+    </p>
+  {% endif %}
+</body>
+</html>

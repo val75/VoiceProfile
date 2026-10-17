@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Delete profile {{ profile.id }}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 24px; }
+    .error { color: #b00020; }
+    button.danger { background: #b00020; color: #fff; border: 0; padding: 6px 12px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <p><a href="{{ url_for('admin.profiles') }}">&larr; Profiles</a></p>
+  <h1>Delete profile {{ profile.id }}?</h1>
+  <p>
+    <b>{{ profile.name or '(no name yet)' }}</b>{% if profile.phone_number %}, {{ profile.phone_number }}{% endif %},
+    {{ status }}{% if created %}, created {{ created.strftime('%Y-%m-%d %H:%M') }}{% endif %}
+  </p>
+  <p>This permanently removes:</p>
+  <ul>
+    <li>the profile (name, photo, transcripts, extracted profile)</li>
+    <li>{{ footprint.reviews }} review{{ '' if footprint.reviews == 1 else 's' }}</li>
+    <li>{{ footprint.recordings }} voice recording{{ '' if footprint.recordings == 1 else 's' }}
+        ({{ '%.1f' % (footprint.recording_bytes / 1048576) }} MB)</li>
+    <li>{{ footprint.otp_codes + footprint.otp_requests }} sign-in / rate-limit row{{ '' if footprint.otp_codes + footprint.otp_requests == 1 else 's' }} for this phone</li>
+  </ul>
+  <p>Copies in backups are removed within 14 days. This cannot be undone.</p>
+
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <form method="post" action="{{ url_for('admin.profile_delete', profile_id=profile.id) }}">
+    <p><label>Type {{ asks_for }} to confirm
+      <input name="confirm" size="8" autocomplete="off" autofocus></label></p>
+    <p><button class="danger" type="submit">Delete permanently</button>
+       &nbsp; <a href="{{ url_for('admin.profiles') }}">Cancel</a></p>
+  </form>
+</body>
+</html>

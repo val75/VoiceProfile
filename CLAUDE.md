@@ -35,8 +35,8 @@ services/
   nlp_service.py          # LLM profile-data extraction (Ollama/OpenAI SDK)
   otp_service.py          # OTP send/verify
   recording_service.py    # Voice-take capture + admin search
-  profile_service.py      # Whole-profile deletion
-  timezones.py            # ADMIN_TIMEZONE helpers
+  profile_service.py      # Admin profile counts/search + whole-profile deletion
+  timezones.py            # ADMIN_TIMEZONE + DB-local timestamp helpers
 whisper_service/          # Self-hosted Whisper backend (FastAPI, runs on DGX)
 blueprints/
   auth/                   # Phone + OTP login (no URL prefix)
@@ -45,6 +45,7 @@ blueprints/
   reviews/                # Public profile + QR review submission (/p)
   voice_input/            # Standalone voice record & transcribe (/voice)
   profile_builder/        # Text-to-structured-data parsing (/builder)
+  admin/                  # Admin login, profiles + recordings pages (ADMIN_URL_PREFIX)
 ```
 
 ## Running

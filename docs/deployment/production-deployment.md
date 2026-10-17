@@ -684,7 +684,8 @@ Found in the final review and the manual trial; none blocks rollout.
   so an export pairs older audio with newer `final_text`. Fix: return the take id from
   `/transcribe`, send it back with `/confirm`, and mark that take.
 - **R2 — huge `?page=` → 500.** `?page=1e20` overflows in the paginate query (admin-only,
-  self-inflicted). Fix: clamp `page` to a sane maximum.
+  self-inflicted). Fix: clamp `page` to a sane maximum (the profiles page already does,
+  via `_page_number` in `blueprints/admin/routes.py`; reuse it).
 - **R3 — unexpected query keys → 500.** The recordings page passes every query argument
   back into `url_for` for the paging links, so `?endpoint=x` (or `_external`, `_anchor`)
   raises `TypeError`. Fix: carry over only `phone`, `from`, `to`, `step`, `decision`.
@@ -713,6 +714,32 @@ Found in the final review and the manual trial; none blocks rollout.
   `services/nlp_service.py` puts the first 200 chars of an unparseable LLM reply into
   `ExtractionError`, which onboarding logs and stores in `profile_data`. Fix: log lengths
   and error classes only.
+
+### Admin profiles page ✅
+
+`<prefix>/profiles` (linked from the dashboard) lists every worker profile with admin
+details only: id, name, phone, status, review / recording counts, photo yes/no, created and
+last-change times. It never shows the job, availability, transcripts or review text (the
+query selects only those columns).
+
+- **Counts** (always whole-database): total, completed, incomplete (by the step they
+  stopped at, `name_confirm` counted as name, plus how many hit an extraction error), and
+  with reviews. "Completed" = onboarding reached `completed`.
+- **Search "Name or phone":** input made only of digits and phone formatting
+  (`+ ( ) - space`) matches those digits anywhere in the phone number (any length, so `555`
+  works); anything with a letter is a case-insensitive "name contains". Filters: status
+  (completed / incomplete) and reviews (has / none). 50 per page, newest first.
+- **Delete…** opens a confirmation page listing what goes (reviews, recordings + size,
+  the phone's OTP rows) and asks for the phone's last 4 digits, or the profile ID when there
+  is no phone. Same deletion as `flask profile delete`. The log line has ids and counts only
+  (no name or phone). Copies in backups age out within 14 days.
+- **Times** show in `ADMIN_TIMEZONE`; the filter row shows the zone and the current time
+  there (as of page load). Profile and review timestamps are naive columns filled by the
+  database's `now()`, i.e. in the Postgres server's `TimeZone` setting (the laptop's is
+  America/Los_Angeles), so the page reads `SHOW TimeZone` to convert them. Recording times
+  are `timestamptz` and unaffected.
+
+Rollout per host: pull, restart. No migration, no new env keys or dependencies.
 
 ---
 

@@ -3,6 +3,9 @@
 from extensions.database import db
 from sqlalchemy.dialects.postgresql import JSONB
 
+# JSONB on Postgres; plain JSON under SQLite so the test suite can create this table.
+_JSONB = JSONB().with_variant(db.JSON(), "sqlite")
+
 
 class WorkerProfile(db.Model):
     __tablename__ = "profiles"
@@ -21,8 +24,8 @@ class WorkerProfile(db.Model):
     sms_consent_at = db.Column(db.DateTime(timezone=True))
 
     # Flexible AI profile
-    profile_data = db.Column(JSONB)
-    transcripts = db.Column(JSONB)
+    profile_data = db.Column(_JSONB)
+    transcripts = db.Column(_JSONB)
 
     # Profile photo (resized JPEG). Deferred so the bytes load only when served.
     photo = db.deferred(db.Column(db.LargeBinary))

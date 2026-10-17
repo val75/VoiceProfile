@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Recordings</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 24px; }
+    form.filters label { margin-right: 12px; }
+    table { border-collapse: collapse; width: 100%; font-size: 14px; margin-top: 12px; }
+    th, td { border-bottom: 1px solid #ddd; padding: 6px 8px; text-align: left; vertical-align: top; }
+    .error { color: #b00020; }
+    .edited { color: #555; font-style: italic; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <p><a href="{{ url_for('admin.dashboard') }}">&larr; Dashboard</a></p>
+  <h1>Voice recordings</h1>
+
+  <form class="filters" method="get" action="{{ url_for('admin.recordings') }}">
+    <label>Phone <input name="phone" value="{{ args.get('phone', '') }}"></label>
+    <label>From <input type="date" name="from" value="{{ args.get('from', '') }}"></label>
+    <label>To <input type="date" name="to" value="{{ args.get('to', '') }}"></label>
+    <label>Step
+      <select name="step">
+        <option value="">any</option>
+        {% for s in ("story", "availability") %}
+        <option value="{{ s }}" {% if args.get('step') == s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Decision
+      <select name="decision">
+        <option value="">any</option>
+        {% for d in decisions %}
+        <option value="{{ d }}" {% if args.get('decision') == d %}selected{% endif %}>{{ d }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit">Search</button>
+    <a href="{{ url_for('admin.recordings') }}">Clear</a>
+  </form>
+  <p>Timezone: {{ zone_name | replace('_', ' ') }}</p>
+
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+  {% if page %}
+    <p>{{ page.total }} take{{ '' if page.total == 1 else 's' }}</p>
+    {% if page.items %}
+    <table>
+      <thead>
+        <tr><th>Time</th><th>Worker</th><th>Step</th><th>#</th><th>Status</th>
+            <th>Decision</th><th>Length</th><th>Size</th><th>Transcript</th><th>Audio</th></tr>
+      </thead>
+      <tbody>
+      {% for r in page.items %}
+        <tr>
+          <td>{{ to_local(r.created_at).strftime('%Y-%m-%d %H:%M') }}</td>
+          <td>
+            {% if r.profile.phone_number %}
+              <a href="{{ url_for('admin.recordings', phone=r.profile.phone_number) }}">{{ r.profile.phone_number }}</a><br>
+            {% endif %}
+            {{ r.profile.name or '' }}
+          </td>
+          <td>{{ r.step }}</td>
+          <td>{{ r.attempt }}</td>
+          <td>{{ r.status }}{% if r.stt_error %}<br><span class="error">{{ r.stt_error }}</span>{% endif %}</td>
+          <td>{% if r.accepted is none %}undecided{% elif r.accepted %}accepted{% else %}re-recorded{% endif %}</td>
+          <td>{% if r.duration_ms is not none %}{{ (r.duration_ms / 1000) | round(1) }} s{% endif %}</td>
+          <td>{{ (r.size_bytes / 1024) | round | int }} KB</td>
+          <td>
+            {{ r.transcript or '' }}
+            {% if r.edited_text %}<div class="edited">Edited: {{ r.edited_text }}</div>{% endif %}
+          </td>
+          <td><audio controls preload="none" src="{{ url_for('admin.recording_audio', take_id=r.id) }}"></audio></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p>No recordings match.</p>
+    {% endif %}
+    <p>
+      {% if page.has_prev %}<a href="{{ url_for('admin.recordings', page=page.prev_num, **base_args) }}">&larr; Newer</a>{% endif %}
+      {% if page.has_next %}<a href="{{ url_for('admin.recordings', page=page.next_num, **base_args) }}">Older &rarr;</a>{% endif %}
+    </p>
+  {% endif %}
+</body>
+</html>

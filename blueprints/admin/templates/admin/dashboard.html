@@ -4,6 +4,7 @@
 <body>
   <h1>Admin dashboard</h1>
   <p>Signed in as: {% if admin %}{{ admin.email }}{% if admin.name %} ({{ admin.name }}){% endif %}{% else %}dev (local){% endif %}</p>
+  <p><a href="{{ url_for('admin.recordings') }}">Recordings</a></p>
   <form method="post" action="{{ url_for('admin.logout') }}">
     <button type="submit">Log out</button>
   </form>

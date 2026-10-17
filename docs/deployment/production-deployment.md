@@ -229,6 +229,11 @@ restored can be silently truncated, mis-permissioned, or version-incompatible.
 The runbook restores into a scratch database precisely so a real recovery isn't
 the first time that path has ever run.
 
+**Privacy policy coupling:** `templates/privacy.html` promises deleted data leaves backups
+"within 14 days". The prune deletes dumps older than `RETENTION_DAYS` minus one hour
+(`-mmin`, not `-mtime`, which rounds down and kept dumps an extra day). If `RETENTION_DAYS`
+in `deploy/backup_db.sh` changes, update that sentence.
+
 ---
 
 ## Change log
@@ -633,6 +638,82 @@ socket peer to be loopback —
 — plus a test that a spoofed header from a non-loopback peer gets the Google
 redirect.
 
+### Raw voice recordings ✅ (follow-ups open)
+
+The audio of every onboarding **story** / **availability** take is kept in
+`voice_recordings` (migration `e7b3c5d18a42`, deferred `bytea`), for debugging and for
+building Whisper / extraction test cases. Admin-only; the worker never sees them.
+
+Env keys (per host; all optional):
+
+- `VOICE_RECORDING_CAPTURE=1` — turn saving on. **Default off**: nothing is stored until set.
+- `VOICE_RECORDING_MAX_BYTES` — larger takes aren't saved (default 25 MB; a 3-minute take is ~1–3 MB).
+- `ADMIN_TIMEZONE` — IANA zone (e.g. `America/Los_Angeles`) for admin date filters and
+  displayed times; blank → UTC; an unknown name logs a startup warning and uses UTC.
+
+Capture is best-effort: a storage failure is logged and the worker's onboarding continues
+unchanged. Takes Whisper failed on are kept with the error. Browse at `<prefix>/recordings`
+(phone / date / step / decision filters, newest first, in-browser playback). The log records
+each time a browser fetches a take from the server, not every play: Firefox replays from its
+own media cache despite `no-store`, so a replay in the same window may leave no log line.
+Chrome's recorder writes a zero WebM Duration; playback and export fill it in from
+`duration_ms` (stored audio is unchanged).
+
+CLI (run on the host that holds the DB):
+
+- `flask recordings export OUT_DIR [--phone] [--from] [--to] [--step] [--accepted-only]` —
+  audio files + `manifest.jsonl` (per take, incl. `final_text`) + `profiles.jsonl`
+  (reviewed `profile_data` for completed profiles).
+- `flask recordings delete (--phone N | --id N | --before YYYY-MM-DD) [--yes]`
+- `flask profile delete (--phone N | --id N) [--yes]` — removes the profile, its reviews,
+  recordings and the phone's OTP rows; use this for "delete my data" requests.
+
+**Exports contain real voices and phone numbers and this repo is public — never commit
+one.** Write them under `exports/` (gitignored) or outside the repo; copy to the laptop
+with `scp`.
+
+Rollout per host: pull, `flask db upgrade`, set the env keys, restart.
+
+#### Follow-ups (open, all minor)
+
+Found in the final review and the manual trial; none blocks rollout.
+
+- **R1 — decision can land on an older take.** `mark_decision` marks the newest
+  *undecided* take of the step. If the newest take was never saved (over the size cap, or
+  a DB error), the worker's Continue/Confirm and edited text go onto their previous take,
+  so an export pairs older audio with newer `final_text`. Fix: return the take id from
+  `/transcribe`, send it back with `/confirm`, and mark that take.
+- **R2 — huge `?page=` → 500.** `?page=1e20` overflows in the paginate query (admin-only,
+  self-inflicted). Fix: clamp `page` to a sane maximum.
+- **R3 — unexpected query keys → 500.** The recordings page passes every query argument
+  back into `url_for` for the paging links, so `?endpoint=x` (or `_external`, `_anchor`)
+  raises `TypeError`. Fix: carry over only `phone`, `from`, `to`, `step`, `decision`.
+- **R4 — export files readable by every user on the host.** `flask recordings export`
+  creates files with the default umask (`644`/`755`). Fix: create the directory `0700` and
+  the files `0600`.
+- **R5 — whole-file reads.** `save_take` reads the full upload before checking
+  `VOICE_RECORDING_MAX_BYTES` (Flask sets no `MAX_CONTENT_LENGTH`, so only Cloudflare's
+  request limit bounds it), and the audio endpoint loads the whole blob from Postgres for
+  every Range request (each seek). Fine at pilot volumes. Fix: check `request.content_length`
+  first / read in a bounded way; serve ranges with `substring(audio ...)` in SQL.
+- **R6 — a resend after a Whisper failure is stored twice.** Resubmitting the same audio
+  after a 502 saves it again as a new attempt. Fix: skip a take whose SHA-256 matches the
+  previous take of the same step.
+- **R7 — `recordings delete` count can differ from what is deleted.** The confirmation
+  counts the matching takes, then the delete runs its own query, so takes arriving in
+  between are also removed (the printed "Deleted N" is accurate). Fix: delete exactly the
+  ids that were counted.
+- **R8 — DB errors elsewhere can log worker text.** SQLAlchemy error messages include the
+  values being written. The recording code logs only the exception class, but other code
+  paths (profile saves, reviews) still log full errors. Fix: set
+  `SQLALCHEMY_ENGINE_OPTIONS = {"hide_parameters": True}` app-wide; cost: harder debugging
+  of genuine DB errors.
+- **R9 — older code logs transcript / profile text on failures (predates recordings).**
+  `services/stt_service.py` logs up to 1000 chars of an unexpected Whisper payload;
+  `services/nlp_service.py` puts the first 200 chars of an unparseable LLM reply into
+  `ExtractionError`, which onboarding logs and stores in `profile_data`. Fix: log lengths
+  and error classes only.
+
 ---
 
 ## Open items
@@ -662,6 +743,8 @@ redirect.
 - [ ] **Admin callback: non-OAuth errors → 403** — Admin login, Follow-up B.
 - [ ] **Dev-login loopback check vs. `X-Forwarded-For`** — Admin login,
   Follow-up C.
+- [ ] **Raw voice recordings follow-ups R1–R9** — minor; R1 (decision on the wrong take)
+  and R4 (export file permissions) first.
 
 ### Resolved during setup
 

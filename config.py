@@ -98,3 +98,10 @@ class Config:
     # public) so the real path isn't published; obscurity only — access is
     # still gated by Google login + the admin allowlist.
     ADMIN_URL_PREFIX = _parse_admin_url_prefix(os.getenv("ADMIN_URL_PREFIX"))
+
+    # --- Raw voice recordings (debugging / NLP test cases) ------------------
+    # Off unless explicitly enabled per host; see docs/deployment.
+    VOICE_RECORDING_CAPTURE = os.getenv("VOICE_RECORDING_CAPTURE", "0") == "1"
+    VOICE_RECORDING_MAX_BYTES = int(os.getenv("VOICE_RECORDING_MAX_BYTES", str(25 * 1024 * 1024)))
+    # IANA zone for admin date filters and displayed times; blank -> UTC.
+    ADMIN_TIMEZONE = os.getenv("ADMIN_TIMEZONE", "")

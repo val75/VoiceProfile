@@ -7,6 +7,7 @@ from . import onboarding_bp
 from blueprints.auth.decorators import profile_owner_required
 from services.stt_service import transcribe_audio, SpeechToTextError
 from services.nlp_service import extract_profile_data, ExtractionError
+from services.recording_service import save_take, record_result, mark_decision
 import re
 import logging
 
@@ -71,6 +72,15 @@ def clean_transcribed_name(transcription: str) -> str:
     text = text.strip(" .,!")
 
     return text
+
+
+def _parse_duration_ms(raw):
+    """Browser-reported take length in ms; None unless a sane non-negative int."""
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return value if 0 <= value <= 24 * 3600 * 1000 else None
 
 
 @onboarding_bp.route('/question/<question_id>')
@@ -331,10 +341,18 @@ def voice_transcribe(profile_id, step):
     if "audio" not in request.files:
         return jsonify({"error": "Missing audio file"}), 400
 
+    audio = request.files["audio"]
+    # Raw-audio capture (best-effort; no-op unless VOICE_RECORDING_CAPTURE).
+    take_id = save_take(profile.id, step, audio,
+                        _parse_duration_ms(request.form.get("duration_ms")))
+
     try:
-        transcript = transcribe_audio(request.files["audio"])
+        transcript = transcribe_audio(audio)
     except SpeechToTextError as e:
+        record_result(take_id, error=str(e))
         return jsonify({"error": str(e)}), 502
+
+    record_result(take_id, transcript=transcript)
 
     profile.transcripts = {**(profile.transcripts or {}), step: transcript}
     profile.onboarding_state = step
@@ -365,6 +383,11 @@ def voice_confirm(profile_id, step):
             edited_text = edited_text.strip()
             if not edited_text:
                 return jsonify({"error": "Text cannot be empty"}), 400
+
+        # Before touching the profile: capture commits / rolls back only its own work.
+        mark_decision(profile.id, step, accepted=True, edited_text=edited_text)
+
+        if edited_text is not None:
             transcripts = dict(profile.transcripts or {})
             transcripts[step] = edited_text
             profile.transcripts = transcripts
@@ -390,6 +413,8 @@ def voice_confirm(profile_id, step):
 
         return jsonify({"success": True, "next_url": next_url})
     else:
+        mark_decision(profile.id, step, accepted=False)
+
         transcripts = dict(profile.transcripts or {})
         transcripts.pop(step, None)
         profile.transcripts = transcripts

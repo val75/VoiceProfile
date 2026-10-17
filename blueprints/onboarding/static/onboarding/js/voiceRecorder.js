@@ -24,6 +24,7 @@
       this.mediaStream = null;
       this.audioChunks = [];
       this.recordingStartTime = null;
+      this.lastDurationMs = null;   // length of the last finished recording
       this.timerInterval = null;
 
       this.visualizer = new window.AudioVisualizer(
@@ -112,6 +113,9 @@
       if (this.timerInterval) {
         clearInterval(this.timerInterval);
         this.timerInterval = null;
+      }
+      if (this.recordingStartTime) {
+        this.lastDurationMs = Date.now() - this.recordingStartTime;
       }
       this.recordingStartTime = null;
       this.elements.timer.classList.remove('near-limit');
@@ -234,6 +238,9 @@
 
         const questionId = document.getElementById('questionId').value;
         formData.append('question_id', questionId);
+        if (this.lastDurationMs != null) {
+          formData.append('duration_ms', String(this.lastDurationMs));
+        }
 
         const response = await fetch(this.getTranscribeUrl(), {
           method: 'POST',

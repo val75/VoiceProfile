@@ -15,6 +15,8 @@ from blueprints.profiles.routes import profiles_bp
 from blueprints.onboarding.routes import onboarding_bp
 from blueprints.reviews.routes import reviews_bp
 from blueprints.admin.routes import admin_bp
+from services.timezones import zone_is_valid
+from cli import profile_cli, recordings_cli
 
 
 def create_app(test_config=None):
@@ -58,6 +60,9 @@ def create_app(test_config=None):
             "Admin login is not configured (OIDC_DISCOVERY_URL / OIDC_CLIENT_ID / "
             "OIDC_CLIENT_SECRET unset); admin login will fail until they are set."
         )
+    tz_name = myapp.config.get("ADMIN_TIMEZONE")
+    if tz_name and not zone_is_valid(tz_name):
+        myapp.logger.warning("ADMIN_TIMEZONE %r is not a known time zone; using UTC.", tz_name)
 
     myapp.register_blueprint(auth_bp)
     myapp.register_blueprint(voice_input_bp, url_prefix="/voice")
@@ -131,6 +136,9 @@ def create_app(test_config=None):
             status = "active" if a.is_active else "disabled"
             issuers = ", ".join(i.issuer for i in a.identities) or "no identities yet"
             print(f"{a.email:40} [{status}] {issuers}")
+
+    myapp.cli.add_command(recordings_cli)
+    myapp.cli.add_command(profile_cli)
 
     @myapp.route('/')
     def home():

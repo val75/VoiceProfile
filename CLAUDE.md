@@ -24,14 +24,19 @@ Workers with limited literacy or typing ability **speak** into their phone brows
 ```
 app.py                    # Flask app factory, blueprint registration, healthz
 config.py                 # Config from environment variables
+cli.py                    # flask recordings export|delete, flask profile delete
 models/
   profile.py              # WorkerProfile (JSONB profile_data & transcripts, photo)
   otp.py                  # OTP codes for phone auth
   review.py               # Reviews left on a public profile
+  recording.py            # VoiceRecording (raw onboarding audio takes, admin-only)
 services/
   stt_service.py          # Whisper API integration
   nlp_service.py          # LLM profile-data extraction (Ollama/OpenAI SDK)
   otp_service.py          # OTP send/verify
+  recording_service.py    # Voice-take capture + admin search
+  profile_service.py      # Whole-profile deletion
+  timezones.py            # ADMIN_TIMEZONE helpers
 whisper_service/          # Self-hosted Whisper backend (FastAPI, runs on DGX)
 blueprints/
   auth/                   # Phone + OTP login (no URL prefix)
@@ -55,6 +60,9 @@ Requires `.env` with `DATABASE_URL`, `WHISPER_URL`, `WHISPER_API_KEY`, `SECRET_K
 ```bash
 flask init-db    # Create database tables
 flask reset-db   # Drop and recreate tables (debug mode only)
+flask recordings export OUT_DIR   # Export voice takes (+ manifest) — never commit exports
+flask recordings delete --phone N # Delete a worker's voice takes
+flask profile delete --phone N    # Delete a profile and everything tied to it
 ```
 
 ## Key Patterns

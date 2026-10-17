@@ -24,3 +24,7 @@ helloworld.py
 # Python bytecode
 __pycache__/
 *.pyc
+
+# Voice-recording exports hold real workers' voices + phone numbers.
+# Never commit them (this repo is public).
+exports/

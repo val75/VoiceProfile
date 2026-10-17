@@ -15,6 +15,11 @@ set -euo pipefail
 APP_DIR="${APP_DIR:-/home/cato-user/VoiceProfile}"
 BACKUP_DIR="${BACKUP_DIR:-/home/cato-user/backups/voiceprofile}"
 RETENTION_DAYS="${RETENTION_DAYS:-14}"
+# Prune anything older than RETENTION_DAYS minus an hour. The hour absorbs
+# night-to-night variation in when a dump finishes, so no dump outlives its
+# RETENTION_DAYS-th nightly run (`find -mtime +N` rounds down and would keep
+# about half of them a day longer). templates/privacy.html relies on this.
+PRUNE_MINUTES=$(( RETENTION_DAYS * 1440 - 60 ))
 
 # Off-box copy to the DGX (private network). Leave DGX_HOST empty to skip it
 # (local-only backup — not protected against disk failure).
@@ -44,7 +49,7 @@ pg_dump --format=custom --no-owner --no-privileges --file="$OUT" "$PG_URL"
 echo "[backup] dump complete ($(du -h "$OUT" | cut -f1))"
 
 # --- Prune old local dumps -------------------------------------------------
-find "$BACKUP_DIR" -name 'voiceprofile_*.dump' -mtime +"$RETENTION_DAYS" -delete
+find "$BACKUP_DIR" -name 'voiceprofile_*.dump' -mmin +"$PRUNE_MINUTES" -delete
 echo "[backup] pruned local dumps older than ${RETENTION_DAYS}d"
 
 # --- Off-box copy to the DGX -----------------------------------------------
@@ -54,7 +59,7 @@ if [[ -n "$DGX_HOST" ]]; then
   ssh "${SSH_OPTS[@]}" "${DGX_USER}@${DGX_HOST}" "mkdir -p '$DGX_DIR'"
   rsync -a -e "ssh ${SSH_OPTS[*]}" "$OUT" "${DGX_USER}@${DGX_HOST}:${DGX_DIR}/"
   ssh "${SSH_OPTS[@]}" "${DGX_USER}@${DGX_HOST}" \
-    "find '$DGX_DIR' -name 'voiceprofile_*.dump' -mtime +${RETENTION_DAYS} -delete"
+    "find '$DGX_DIR' -name 'voiceprofile_*.dump' -mmin +${PRUNE_MINUTES} -delete"
   echo "[backup] off-box copy done"
 else
   echo "[backup] DGX_HOST empty — LOCAL ONLY (not disk-failure safe)"

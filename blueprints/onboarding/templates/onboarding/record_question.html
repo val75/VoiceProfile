@@ -52,6 +52,7 @@
         <div id="confirmPanel" role="region" aria-live="polite">
             <span id="heardLabel">We heard</span>
             <div id="heardText"></div>
+            <p id="confirmError" class="confirm-error" role="alert" hidden></p>
             <div class="confirm-buttons">
                 <button id="btnConfirm" type="button">✓ That's right</button>
                 <div class="confirm-row">
@@ -60,6 +61,17 @@
                 </div>
             </div>
         </div>
+
+        {% if is_last_step %}
+        <!-- Replaces the confirmation panel while the profile is extracted -->
+        <div id="building" role="status" hidden>
+            <div class="building-circle">
+                <span class="spinner" aria-hidden="true"></span>
+                <span>Building your profile…</span>
+            </div>
+            <p class="building-note">This can take up to a minute. Please keep this page open.</p>
+        </div>
+        {% endif %}
 
         <!-- Hidden field to pass question_id from backend Flask route to frontend -->
         <input type="hidden" id="questionId" value="{{ question_id }}">

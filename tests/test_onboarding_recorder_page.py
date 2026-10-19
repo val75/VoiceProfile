@@ -22,6 +22,19 @@ def test_question_page_has_one_record_button_and_its_prompt(client, worker, step
     assert RECORD_PROMPTS[step] in html
 
 
+@pytest.mark.parametrize("step, has_building", [
+    ("name", False), ("story", False), ("availability", True),
+])
+def test_building_circle_only_on_last_step_and_hidden(client, worker, step, has_building):
+    html = client.get(f"/onboarding/{worker.id}/{step}").get_data(as_text=True)
+
+    assert ('id="building"' in html) == has_building
+    if has_building:
+        tag = html[html.index('id="building"'):].split(">", 1)[0]
+        assert "hidden" in tag
+        assert "Building your profile…" in html
+
+
 def test_edit_button_is_not_hidden_on_load(client, worker):
     html = client.get(f"/onboarding/{worker.id}/story").get_data(as_text=True)
     edit_tag = html[html.index('id="btnEdit"'):].split(">", 1)[0]

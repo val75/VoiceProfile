@@ -12,6 +12,8 @@
  *   #confirmPanel    - confirmation panel wrapper
  *   #heardLabel      - label above transcription text
  *   #heardText       - element that displays the transcription
+ *   #confirmError    - error line above the confirm buttons
+ *   #building        - "Building your profile…" circle (last step only)
  *   #btnConfirm      - confirm button
  *   #btnEdit         - edit button
  *   #btnRetry        - re-record / cancel button
@@ -29,6 +31,8 @@
         const btnConfirm   = document.getElementById('btnConfirm');
         const btnEdit      = document.getElementById('btnEdit');
         const btnRetry     = document.getElementById('btnRetry');
+        const confirmError = document.getElementById('confirmError');
+        const building     = document.getElementById('building');  // last step only
 
         /* ── State ────────────────────────────────────────────────────── */
         const questionId   = document.getElementById('questionId').value;
@@ -49,12 +53,38 @@
 
         function hideConfirmPanel() {
             confirmPanel.classList.remove('visible');
+            hideConfirmError();
             heardText.textContent = '';
             confirmUrl = null;
             isEditing = false;
             btnConfirm.textContent = "✓ That's right";
             btnRetry.textContent = '↩ Re-record';
             heardLabel.textContent = 'We heard';
+        }
+
+        // Errors go right above the buttons, where the worker is looking,
+        // not in the status line at the top of the page.
+        function showConfirmError(message) {
+            confirmError.textContent = message;
+            confirmError.hidden = false;
+        }
+
+        function hideConfirmError() {
+            confirmError.hidden = true;
+            confirmError.textContent = '';
+        }
+
+        // Last step: swap the panel for the big "Building your profile…"
+        // circle, in the spot the worker just tapped.
+        function showBuilding() {
+            confirmPanel.classList.remove('visible');
+            building.hidden = false;
+            building.scrollIntoView({ block: 'nearest' });
+        }
+
+        function hideBuilding() {
+            building.hidden = true;
+            confirmPanel.classList.add('visible');
         }
 
         function setConfirmBtnsDisabled(disabled) {
@@ -96,6 +126,7 @@
 
         function exitEditMode() {
             isEditing = false;
+            hideConfirmError();
             heardText.textContent = currentTranscription;
             heardText.classList.toggle('long', !isName);
             heardLabel.textContent = 'We heard';
@@ -153,21 +184,18 @@
                 const input = document.getElementById('editInput');
                 const editedText = (input?.value || '').trim();
                 if (!editedText) {
-                    statusEl.textContent = 'Please enter some text or cancel editing.';
+                    showConfirmError('Please enter some text or cancel editing.');
                     return;
                 }
             }
 
+            hideConfirmError();
             setConfirmBtnsDisabled(true);
 
             const isLastStep = document.getElementById('isLastStep')?.value === 'true';
-            let loadingTimer = null;
             if (isLastStep) {
-                let dots = 0;
-                loadingTimer = setInterval(() => {
-                    dots = (dots + 1) % 4;
-                    statusEl.textContent = 'Building your profile' + '.'.repeat(dots);
-                }, 400);
+                statusEl.textContent = 'Building your profile…';
+                showBuilding();
             } else {
                 statusEl.textContent = 'Saving…';
             }
@@ -183,7 +211,6 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
-                clearInterval(loadingTimer);
                 const data = await res.json();
 
                 if (data.next_url) {
@@ -192,8 +219,11 @@
                     statusEl.textContent = 'Saved!';
                 }
             } catch (err) {
-                clearInterval(loadingTimer);
-                statusEl.textContent = 'Network error. Please try again.';
+                if (isLastStep) {
+                    hideBuilding();
+                }
+                statusEl.textContent = 'Does this look right?';
+                showConfirmError('Network error. Please try again.');
                 setConfirmBtnsDisabled(false);
             }
         });
@@ -214,6 +244,7 @@
             }
 
             // Re-record: POST to wipe backend state, then reset UI in-place
+            hideConfirmError();
             setConfirmBtnsDisabled(true);
             statusEl.textContent = 'Resetting…';
 
@@ -228,7 +259,8 @@
                 recorder.reset();
                 setConfirmBtnsDisabled(false);
             } catch (err) {
-                statusEl.textContent = 'Network error. Please try again.';
+                statusEl.textContent = 'Does this look right?';
+                showConfirmError('Network error. Please try again.');
                 setConfirmBtnsDisabled(false);
             }
         });

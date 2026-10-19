@@ -52,6 +52,7 @@
             heardText.textContent = '';
             confirmUrl = null;
             isEditing = false;
+            btnConfirm.textContent = "✓ That's right";
             btnRetry.textContent = '↩ Re-record';
             heardLabel.textContent = 'We heard';
         }
@@ -86,6 +87,9 @@
             }
 
             heardLabel.textContent = 'Edit below';
+            // "That's right" reads as approving the text above; while editing
+            // the button saves the edit and moves on, so say that.
+            btnConfirm.textContent = '✓ Save and continue';
             btnRetry.textContent = '✕ Cancel';
             btnEdit.hidden = true;
         }
@@ -95,6 +99,7 @@
             heardText.textContent = currentTranscription;
             heardText.classList.toggle('long', !isName);
             heardLabel.textContent = 'We heard';
+            btnConfirm.textContent = "✓ That's right";
             btnRetry.textContent = '↩ Re-record';
             btnEdit.hidden = false;
         }

@@ -8,6 +8,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from config import Config
 from extensions.database import db, migrate
 from extensions.oauth import oauth
+from extensions import static_versioning
 from blueprints.auth.routes import auth_bp
 from blueprints.voice_input.routes import voice_input_bp
 from blueprints.profile_builder.routes import profile_builder_bp
@@ -39,6 +40,7 @@ def create_app(test_config=None):
 
     db.init_app(myapp)
     migrate.init_app(myapp, db)
+    static_versioning.init_app(myapp)
     oauth.init_app(myapp)
     # `oauth` is a module-global and create_app runs once per test. Authlib does
     # NOT raise on a duplicate name: register() overwrites the config in

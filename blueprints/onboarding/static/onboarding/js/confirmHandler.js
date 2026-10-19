@@ -1,18 +1,21 @@
 /**
  * confirmHandler.js
- * Boots VoiceRecorder and manages the post-transcription confirmation panel.
- * After 2+ transcription attempts, offers a manual edit option.
+ * Boots VoiceRecorder and manages the post-transcription confirmation panel:
+ * That's right / Edit / Re-record, all available from the first attempt.
  *
  * Expects the following in the DOM:
  *   #questionId      - hidden field with the question key
  *   #transcribeUrl   - hidden field with the profile-scoped transcribe endpoint
  *   #status          - status message element
- *   #record / #stop / #send / #timer / #recordText / #visualizer / .bar
+ *   #controls / #recordBtn / #recordIcon / #recordLabel / #againBtn
+ *   #timer / #visualizer / .bar
  *   #confirmPanel    - confirmation panel wrapper
  *   #heardLabel      - label above transcription text
- *   #heardName       - element that displays the transcription
+ *   #heardText       - element that displays the transcription
+ *   #confirmError    - error line above the confirm buttons
+ *   #building        - "Building your profile…" circle (last step only)
  *   #btnConfirm      - confirm button
- *   #btnEdit         - edit button (hidden until attempt >= 2)
+ *   #btnEdit         - edit button
  *   #btnRetry        - re-record / cancel button
  */
 
@@ -24,43 +27,64 @@
         const statusEl     = document.getElementById('status');
         const confirmPanel = document.getElementById('confirmPanel');
         const heardLabel   = document.getElementById('heardLabel');
-        const heardName    = document.getElementById('heardName');
+        const heardText    = document.getElementById('heardText');
         const btnConfirm   = document.getElementById('btnConfirm');
         const btnEdit      = document.getElementById('btnEdit');
         const btnRetry     = document.getElementById('btnRetry');
+        const confirmError = document.getElementById('confirmError');
+        const building     = document.getElementById('building');  // last step only
 
         /* ── State ────────────────────────────────────────────────────── */
         const questionId   = document.getElementById('questionId').value;
-        const isStoryStep  = questionId === 'story';
+        const isName       = questionId === 'name';
         let confirmUrl          = null;
-        let attemptCount        = 0;
         let isEditing           = false;
         let currentTranscription = '';
 
-        /* Format an "MM:SS" timer string as e.g. "1m 34s" / "42s" / "3m". */
-        function formatDuration(mmss) {
-            const m = parseInt(mmss.slice(0, 2), 10);
-            const s = parseInt(mmss.slice(3, 5), 10);
-            if (!Number.isFinite(m) || !Number.isFinite(s)) return mmss;
-            if (m === 0) return `${s}s`;
-            if (s === 0) return `${m}m`;
-            return `${m}m ${s}s`;
-        }
-
         /* ── Helpers ──────────────────────────────────────────────────── */
         function showConfirmPanel(text) {
-            heardName.textContent = text;
+            heardText.textContent = text;
+            // Story and availability are sentences: show them as a readable,
+            // scrollable paragraph instead of one big bold line.
+            heardText.classList.toggle('long', !isName);
+            btnEdit.hidden = false;
             confirmPanel.classList.add('visible');
         }
 
         function hideConfirmPanel() {
             confirmPanel.classList.remove('visible');
-            heardName.textContent = '';
+            hideConfirmError();
+            heardText.textContent = '';
             confirmUrl = null;
             isEditing = false;
+            btnConfirm.textContent = "✓ That's right";
             btnRetry.textContent = '↩ Re-record';
-            btnEdit.style.display = 'none';
             heardLabel.textContent = 'We heard';
+        }
+
+        // Errors go right above the buttons, where the worker is looking,
+        // not in the status line at the top of the page.
+        function showConfirmError(message) {
+            confirmError.textContent = message;
+            confirmError.hidden = false;
+        }
+
+        function hideConfirmError() {
+            confirmError.hidden = true;
+            confirmError.textContent = '';
+        }
+
+        // Last step: swap the panel for the big "Building your profile…"
+        // circle, in the spot the worker just tapped.
+        function showBuilding() {
+            confirmPanel.classList.remove('visible');
+            building.hidden = false;
+            building.scrollIntoView({ block: 'nearest' });
+        }
+
+        function hideBuilding() {
+            building.hidden = true;
+            confirmPanel.classList.add('visible');
         }
 
         function setConfirmBtnsDisabled(disabled) {
@@ -71,8 +95,6 @@
 
         function enterEditMode() {
             isEditing = true;
-            const questionId = document.getElementById('questionId').value;
-            const isName = questionId === 'name';
 
             const input = isName
                 ? document.createElement('input')
@@ -82,37 +104,48 @@
             input.value = currentTranscription;
             input.className = 'edit-input';
             if (!isName) {
-                input.rows = 3;
+                input.rows = questionId === 'story' ? 10 : 4;
             }
 
-            heardName.textContent = '';
-            heardName.appendChild(input);
+            // The textarea is its own box; drop the reading-box styling around it.
+            heardText.classList.remove('long');
+            heardText.textContent = '';
+            heardText.appendChild(input);
             input.focus();
-            input.select();
+            if (isName) {
+                input.select();
+            }
 
             heardLabel.textContent = 'Edit below';
+            // "That's right" reads as approving the text above; while editing
+            // the button saves the edit and moves on, so say that.
+            btnConfirm.textContent = '✓ Save and continue';
             btnRetry.textContent = '✕ Cancel';
-            btnEdit.style.display = 'none';
+            btnEdit.hidden = true;
         }
 
         function exitEditMode() {
             isEditing = false;
-            heardName.textContent = currentTranscription;
+            hideConfirmError();
+            heardText.textContent = currentTranscription;
+            heardText.classList.toggle('long', !isName);
             heardLabel.textContent = 'We heard';
+            btnConfirm.textContent = "✓ That's right";
             btnRetry.textContent = '↩ Re-record';
-            btnEdit.style.display = attemptCount >= 2 ? '' : 'none';
+            btnEdit.hidden = false;
         }
 
         /* ── Boot VoiceRecorder ────────────────────────────────────────── */
         const elements = {
-            status:     statusEl,
-            recordBtn:  document.getElementById('record'),
-            stopBtn:    document.getElementById('stop'),
-            sendBtn:    document.getElementById('send'),
-            timer:      document.getElementById('timer'),
-            recordText: document.getElementById('recordText'),
-            visualizer: document.getElementById('visualizer'),
-            bars:       document.querySelectorAll('.bar')
+            status:      statusEl,
+            controls:    document.getElementById('controls'),
+            recordBtn:   document.getElementById('recordBtn'),
+            recordIcon:  document.getElementById('recordIcon'),
+            recordLabel: document.getElementById('recordLabel'),
+            againBtn:    document.getElementById('againBtn'),
+            timer:       document.getElementById('timer'),
+            visualizer:  document.getElementById('visualizer'),
+            bars:        document.querySelectorAll('.bar')
         };
 
         if (typeof window.VoiceRecorder === 'undefined') {
@@ -122,37 +155,23 @@
             return;
         }
 
-        new window.VoiceRecorder(elements, {
+        const recorder = new window.VoiceRecorder(elements, {
             onSuccess(data) {
-                attemptCount++;
                 confirmUrl = data.confirm_url || null;
 
                 const displayText = data.name || data.transcription;
 
-                // Story step: a 3-min transcript is too long to confirm
-                // by reading. Show a duration preview + Continue / Re-record.
-                if (isStoryStep && confirmUrl && displayText) {
-                    currentTranscription = displayText;
-                    const captured = formatDuration(elements.timer.textContent);
-                    heardLabel.textContent = 'Captured';
-                    btnConfirm.textContent = 'Continue';
-                    btnEdit.style.display = 'none';
-                    statusEl.textContent = '';
-                    showConfirmPanel(captured);
-                    return;
-                }
-
                 if (confirmUrl && displayText) {
                     currentTranscription = displayText;
                     statusEl.textContent = 'Does this look right?';
+                    statusEl.className = '';
                     showConfirmPanel(displayText);
-                    btnEdit.style.display = attemptCount >= 2 ? '' : 'none';
                 } else {
                     // No confirmation step — default display
+                    recorder.reset();
                     statusEl.textContent = data.text
                         ? `Transcription: "${data.text}"`
                         : 'Transcription complete';
-                    elements.sendBtn.disabled = false;
                 }
             }
         });
@@ -165,21 +184,18 @@
                 const input = document.getElementById('editInput');
                 const editedText = (input?.value || '').trim();
                 if (!editedText) {
-                    statusEl.textContent = 'Please enter some text or cancel editing.';
+                    showConfirmError('Please enter some text or cancel editing.');
                     return;
                 }
             }
 
+            hideConfirmError();
             setConfirmBtnsDisabled(true);
 
             const isLastStep = document.getElementById('isLastStep')?.value === 'true';
-            let loadingTimer = null;
             if (isLastStep) {
-                let dots = 0;
-                loadingTimer = setInterval(() => {
-                    dots = (dots + 1) % 4;
-                    statusEl.textContent = 'Building your profile' + '.'.repeat(dots);
-                }, 400);
+                statusEl.textContent = 'Building your profile…';
+                showBuilding();
             } else {
                 statusEl.textContent = 'Saving…';
             }
@@ -195,7 +211,6 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
-                clearInterval(loadingTimer);
                 const data = await res.json();
 
                 if (data.next_url) {
@@ -204,8 +219,11 @@
                     statusEl.textContent = 'Saved!';
                 }
             } catch (err) {
-                clearInterval(loadingTimer);
-                statusEl.textContent = 'Network error. Please try again.';
+                if (isLastStep) {
+                    hideBuilding();
+                }
+                statusEl.textContent = 'Does this look right?';
+                showConfirmError('Network error. Please try again.');
                 setConfirmBtnsDisabled(false);
             }
         });
@@ -226,6 +244,7 @@
             }
 
             // Re-record: POST to wipe backend state, then reset UI in-place
+            hideConfirmError();
             setConfirmBtnsDisabled(true);
             statusEl.textContent = 'Resetting…';
 
@@ -237,12 +256,11 @@
                 });
 
                 hideConfirmPanel();
-                statusEl.textContent = 'Ready to record';
-                elements.recordBtn.disabled = false;
-                elements.sendBtn.disabled = true;
+                recorder.reset();
                 setConfirmBtnsDisabled(false);
             } catch (err) {
-                statusEl.textContent = 'Network error. Please try again.';
+                statusEl.textContent = 'Does this look right?';
+                showConfirmError('Network error. Please try again.');
                 setConfirmBtnsDisabled(false);
             }
         });

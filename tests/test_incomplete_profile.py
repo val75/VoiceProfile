@@ -69,10 +69,10 @@ def test_public_pages_served_once_completed(client, make_profile, path):
     assert client.get(path.format(id=p.id)).status_code == 200
 
 
-def _record(client, pid, step):
+def _record(client, pid, step, heard="Ana Pop"):
     url = f"/onboarding/{pid}/name/transcribe" if step == "name" \
         else f"/onboarding/{pid}/{step}/transcribe"
-    with patch("blueprints.onboarding.routes.transcribe_audio", return_value="Ana Pop"):
+    with patch("blueprints.onboarding.routes.transcribe_audio", return_value=heard):
         return client.post(url, data={"audio": (io.BytesIO(b"abc"), "voice.webm", "audio/webm")},
                            content_type="multipart/form-data")
 
@@ -93,6 +93,48 @@ def test_rerecording_a_step_keeps_a_completed_profile_public(client, make_profil
     assert p.onboarding_state == "completed"
     assert client.get(f"/p/{p.id}").status_code == 200
     assert client.get(f"/profiles/{p.id}/view").status_code == 200
+
+
+def _public_name(client, pid):
+    return client.get(f"/p/{pid}").get_data(as_text=True)
+
+
+def test_rerecorded_name_is_not_saved_until_confirmed(client, make_profile, login):
+    p = login(make_profile(name="Maria Lopez", onboarding_state="completed"))
+    resp = _record(client, p.id, "name", heard="MY NAME IS ana pop.")
+    assert resp.get_json()["name"] == "Ana Pop"  # still shown to the worker to confirm
+    assert p.name == "Maria Lopez"
+    assert "Maria Lopez" in _public_name(client, p.id)
+
+
+def test_rejected_name_keeps_the_old_one(client, make_profile, login):
+    p = login(make_profile(name="Maria Lopez", onboarding_state="completed"))
+    _record(client, p.id, "name", heard="Ana Pop")
+    client.post(f"/onboarding/{p.id}/name/confirm", json={"confirmed": False})
+    assert p.name == "Maria Lopez"
+    assert "Maria Lopez" in _public_name(client, p.id)
+
+
+def test_accepted_name_is_saved_cleaned(client, make_profile, login):
+    p = login(make_profile(name="Maria Lopez", onboarding_state="completed"))
+    _record(client, p.id, "name", heard="MY NAME IS ana pop.")
+    client.post(f"/onboarding/{p.id}/name/confirm", json={"confirmed": True})
+    assert p.name == "Ana Pop"
+
+
+def test_edited_name_wins_over_the_transcript(client, make_profile, login):
+    p = login(make_profile(name=None, onboarding_state="name"))
+    _record(client, p.id, "name", heard="Anna Pope")
+    client.post(f"/onboarding/{p.id}/name/confirm",
+                json={"confirmed": True, "edited_text": "  Ana Pop "})
+    assert p.name == "Ana Pop"
+
+
+def test_confirm_without_a_recorded_name_is_rejected(client, make_profile, login):
+    p = login(make_profile(name=None, onboarding_state="name"))
+    resp = client.post(f"/onboarding/{p.id}/name/confirm", json={"confirmed": True})
+    assert resp.status_code == 400
+    assert p.onboarding_state == "name"
 
 
 def test_unfinished_profile_still_advances(client, make_profile, login):

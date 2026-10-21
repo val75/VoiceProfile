@@ -49,6 +49,9 @@ VOICE_STEPS = ["name", "story", "availability"]
 # How long (seconds) the worker may speak per voice step. Story is capped at 3 min.
 STEP_MAX_SECONDS = {"story": 180}
 
+# Session key for a name take awaiting the worker's confirmation.
+PENDING_NAME_KEY = "pending_name_transcript"
+
 
 def _advance(profile, state):
     """Record onboarding progress. A completed profile stays completed while it's
@@ -194,7 +197,7 @@ def name_step(profile_id):
 @onboarding_bp.route("/<int:profile_id>/name/transcribe", methods=["POST"])
 @profile_owner_required
 def name_transcribe(profile_id):
-    """Receive the audio, transcribe it, clean the name, and persist it."""
+    """Receive the audio, transcribe it, and hold the name until the worker confirms it."""
     profile = WorkerProfile.query.get_or_404(profile_id)
 
     if "audio" not in request.files:
@@ -209,9 +212,9 @@ def name_transcribe(profile_id):
 
     cleaned_name = clean_transcribed_name(transcript)
 
-    # Persist the cleaned name and raw transcript, then move state forward.
-    profile.name = cleaned_name
-    profile.transcripts = {**(profile.transcripts or {}), "name": transcript}
+    # The name is public, so a re-recorded one must not replace it before it's
+    # confirmed: keep the take in the session; confirm_name saves it.
+    session[PENDING_NAME_KEY] = transcript
     _advance(profile, "name_confirm")
     db.session.commit()
 
@@ -252,9 +255,9 @@ def name_transcribe(profile_id):
 @profile_owner_required
 def confirm_name(profile_id):
     """
-        The client sends { confirmed: true/false }
-        - Confirmed  → advance to the skills step
-        - Rejected   → wipe the name and send the user back to re-record
+        The client sends { confirmed: true/false, edited_text? }
+        - Confirmed  → save the pending name (edited text wins) and advance to the story step
+        - Rejected   → drop the pending name (the saved one is untouched) and re-record
     """
 
     profile = WorkerProfile.query.get_or_404(profile_id)
@@ -263,13 +266,19 @@ def confirm_name(profile_id):
     confirmed = data.get("confirmed")
 
     if confirmed:
+        transcript = session.get(PENDING_NAME_KEY)
+        if transcript is None:
+            return jsonify({"error": "Please record your name first."}), 400
+
         edited_text = data.get("edited_text")
         if edited_text is not None:
             edited_text = edited_text.strip()
             if not edited_text:
                 return jsonify({"error": "Name cannot be empty"}), 400
-            profile.name = edited_text
 
+        session.pop(PENDING_NAME_KEY)
+        profile.name = edited_text if edited_text is not None else clean_transcribed_name(transcript)
+        profile.transcripts = {**(profile.transcripts or {}), "name": transcript}
         _advance(profile, "story")
         db.session.commit()
 
@@ -278,8 +287,8 @@ def confirm_name(profile_id):
             "next_url": url_for("onboarding.voice_step", profile_id=profile.id, step="story")
         })
     else:
-        # Reset so the user can try again
-        profile.name = None
+        # Let the user try again; a previously saved name stays as it was.
+        session.pop(PENDING_NAME_KEY, None)
         _advance(profile, "name")
         db.session.commit()
 

@@ -768,6 +768,10 @@ caller in the app; prod access log showed no hits in 30 days):
 - **Re-editing:** once completed, a profile stays completed while the worker re-records a step
   (Edit profile → "Re-record story"); the onboarding steps no longer move its state backwards,
   which would otherwise take `/p/<id>` (and their printed QR code) offline mid-edit.
+- **Name re-recording:** a recorded name is held in the session and saved only on confirm
+  (edited text wins); rejecting it leaves the saved name as it was. Before, the new take
+  replaced the public name immediately and a reject blanked it. A worker sitting on the name
+  confirm screen during the deploy just gets "Please record your name first" and re-records.
 
 `POST /voice/transcribe` stays public (anonymous voice reviews need it) but is now capped:
 a per-IP hourly limit `TRANSCRIBE_MAX_PER_IP_PER_HOUR` (default 30 → 429), Postgres-backed

@@ -150,9 +150,10 @@
 
         const response = await fetch('/voice/transcribe', { method: 'POST', body: formData });
 
-        if (!response.ok) throw new Error(`Server error: ${response.status}`);
-
-        const data = await response.json();
+        // Error replies (429 rate limit, 413 too long, 502 Whisper) carry a readable
+        // message in { error }; only fall back to the bare status if they don't.
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok && !data.error) throw new Error(`Server error: ${response.status}`);
 
         if (data.error) {
           this.updateStatus(`Error: ${data.error}`, 'error');

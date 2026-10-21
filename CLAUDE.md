@@ -30,6 +30,8 @@ models/
   otp.py                  # OTP codes for phone auth
   review.py               # Reviews left on a public profile
   recording.py            # VoiceRecording (raw onboarding audio takes, admin-only)
+  otp_request.py          # OTP send log (rate limiting)
+  transcribe_request.py   # /voice/transcribe call log (rate limiting)
 services/
   stt_service.py          # Whisper API integration
   nlp_service.py          # LLM profile-data extraction (Ollama/OpenAI SDK)
@@ -43,8 +45,7 @@ blueprints/
   onboarding/             # Voice onboarding state machine (/onboarding)
   profiles/               # Profile view + QR code (/profiles)
   reviews/                # Public profile + QR review submission (/p)
-  voice_input/            # Standalone voice record & transcribe (/voice)
-  profile_builder/        # Text-to-structured-data parsing (/builder)
+  voice_input/            # Public transcribe for voice reviews, rate-limited per IP (/voice)
   admin/                  # Admin login, profiles + recordings pages (ADMIN_URL_PREFIX)
 ```
 
@@ -68,7 +69,9 @@ flask profile delete --phone N    # Delete a profile and everything tied to it
 
 ## Key Patterns
 
-- Blueprints register under URL prefixes: `/onboarding`, `/voice`, `/profiles`, `/builder`
+- Blueprints register under URL prefixes: `/onboarding`, `/voice`, `/profiles`, `/p`
+- A profile is public (`/p/<id>`, its photo, reviews) only once `onboarding_state == "completed"`;
+  the owner's `/profiles/<id>/view` sends an unfinished one back to its onboarding step
 - Audio recording uses MediaRecorder API with format auto-detection (webm/ogg/mp4)
 - Onboarding state machine tracks progress: `name → name_confirm → skills → experience → availability → review`
 - JSONB columns (`profile_data`, `transcripts`) allow flexible schema evolution

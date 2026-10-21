@@ -741,6 +741,56 @@ query selects only those columns).
 
 Rollout per host: pull, restart. No migration, no new env keys or dependencies.
 
+### Unfinished profiles + unauthenticated endpoints ✅
+
+Reported by a tester: logged in, quit at the name step without recording, and came back
+to an empty profile. The row is created at OTP success by design (it is the account and
+holds `sms_consent_at`); the bug was that nothing stopped an unfinished profile from being
+*shown*. The home page's "Continue" button (session cookie still alive) went straight to
+`/profiles/<id>/view`, and `/p/<id>` served the empty profile publicly and accepted reviews.
+
+- **Owner view:** `view_profile` redirects an unfinished profile to its onboarding step
+  (`post_auth_url`, the same routing as after login).
+- **Public pages:** `/p/<id>`, its review form and thanks page, and `/profiles/<id>/photo`
+  404 until `onboarding_state == "completed"` (`completed_profile_or_404`).
+
+Auditing every route's auth turned up unauthenticated legacy endpoints, all removed (no
+caller in the app; prod access log showed no hits in 30 days):
+
+- `POST /profiles/` built a `WorkerProfile` from the request JSON, so anyone could create a
+  profile with **someone else's phone number** and `onboarding_state="completed"`; that
+  person's first OTP login would then land in the planted profile.
+- `GET /profiles/`, `GET /profiles/<id>`: every profile's name and `profile_data`.
+- `POST /voice/upload`, `GET /voice/record`, `POST /builder/parse` (whole `profile_builder`
+  blueprint), `GET /onboarding/question/<id>`, `POST /onboarding/transcribe`: free STT/LLM
+  runs and phone-less profile rows. Their dead templates/static went with them.
+
+`POST /voice/transcribe` stays public (anonymous voice reviews need it) but is now capped:
+`TRANSCRIBE_MAX_BYTES` (default 10 MB → 413, quota untouched) and a per-IP hourly limit
+`TRANSCRIBE_MAX_PER_IP_PER_HOUR` (default 30 → 429), Postgres-backed like the OTP limit via
+the `transcribe_requests` table (migration `f2a8d6c4b913`). The review page now shows the
+server's error message instead of a bare status code.
+
+**Before rollout, check prod for planted or orphaned rows** (read-only; lists, never deletes):
+
+```sql
+SELECT p.id, p.name, p.phone_number, p.onboarding_state, p.created_at, p.sms_consent_at,
+       EXISTS (SELECT 1 FROM otp_requests r WHERE r.phone = p.phone_number) AS has_otp_request
+FROM profiles p
+WHERE p.phone_number IS NULL
+   OR p.sms_consent_at IS NULL
+   OR NOT EXISTS (SELECT 1 FROM otp_requests r WHERE r.phone = p.phone_number)
+ORDER BY p.created_at;
+```
+
+A real sign-up made through the current login has a phone, `sms_consent_at`, and at least
+one `otp_requests` row (the per-phone prune always keeps the newest). Rows older than the
+SMS-consent or OTP-rate-limit rollouts can legitimately miss one of these, so treat the list
+as candidates: look each up in the admin profiles page and delete there only if it isn't a
+real worker.
+
+Rollout per host: pull, `flask db upgrade`, restart. New env keys are optional (defaults above).
+
 ---
 
 ## Open items
@@ -772,6 +822,8 @@ Rollout per host: pull, restart. No migration, no new env keys or dependencies.
   Follow-up C.
 - [ ] **Raw voice recordings follow-ups R1–R9** — minor; R1 (decision on the wrong take)
   and R4 (export file permissions) first.
+- [ ] **Planted/orphaned profile check** — run the read-only query under "Unfinished
+  profiles + unauthenticated endpoints" on prod before that rollout.
 
 ### Resolved during setup
 

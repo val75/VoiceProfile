@@ -31,6 +31,8 @@ def app():
         "VOICE_RECORDING_CAPTURE": False,
         "VOICE_RECORDING_MAX_BYTES": 25 * 1024 * 1024,
         "ADMIN_TIMEZONE": "",
+        "TRANSCRIBE_MAX_PER_IP_PER_HOUR": 30,
+        "TRANSCRIBE_MAX_BYTES": 10 * 1024 * 1024,
     })
     with application.app_context():
         engine = _db.engine

@@ -1,7 +1,7 @@
 from flask import Blueprint, request, redirect, url_for, render_template, session, flash
 from extensions.database import db
-from models.profile import WorkerProfile
 from models.review import Review
+from services.profile_service import completed_profile_or_404
 
 reviews_bp = Blueprint(
     "reviews", __name__,
@@ -12,14 +12,14 @@ reviews_bp = Blueprint(
 
 @reviews_bp.route("/<int:profile_id>")
 def public_profile(profile_id):
-    profile = WorkerProfile.query.get_or_404(profile_id)
+    profile = completed_profile_or_404(profile_id)
     reviews = Review.query.filter_by(profile_id=profile_id).order_by(Review.created_at.desc()).all()
     return render_template("reviews/public_profile.html", profile=profile, reviews=reviews)
 
 
 @reviews_bp.route("/<int:profile_id>/review/new", methods=["GET", "POST"])
 def new_review(profile_id):
-    profile = WorkerProfile.query.get_or_404(profile_id)
+    profile = completed_profile_or_404(profile_id)
 
     if session.get("profile_id") == profile_id:
         flash("You cannot review your own profile.")
@@ -54,5 +54,5 @@ def new_review(profile_id):
 
 @reviews_bp.route("/<int:profile_id>/review/thanks")
 def thanks(profile_id):
-    profile = WorkerProfile.query.get_or_404(profile_id)
+    profile = completed_profile_or_404(profile_id)
     return render_template("reviews/thanks.html", profile=profile)

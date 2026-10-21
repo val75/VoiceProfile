@@ -90,35 +90,6 @@ def _parse_duration_ms(raw):
     return value if 0 <= value <= 24 * 3600 * 1000 else None
 
 
-@onboarding_bp.route('/question/<question_id>')
-def show_question(question_id):
-    question_text = QUESTIONS.get(question_id, 'Question not found')
-
-    return render_template(
-        'onboarding/record_question.html',
-        question_id=question_id,
-        question_text=question_text
-    )
-
-
-@onboarding_bp.route("/transcribe", methods=["POST"])
-def transcribe():
-    if "audio" not in request.files:
-        return jsonify({"error": "Missing audio file"}), 400
-
-    audio = request.files["audio"]
-    question_id = request.form.get('question_id', 'unknown')
-
-    try:
-        text = transcribe_audio(audio)
-    except SpeechToTextError as e:
-        return jsonify({"error": str(e)}), 502
-
-    return jsonify({
-        'text': text,
-        'question_id': question_id
-    })
-
 # ---------------------------------------------------------------------------
 # Onboarding flow
 # ---------------------------------------------------------------------------

@@ -13,8 +13,9 @@ from services.rate_limit import check_otp_rate_limit
 logger = logging.getLogger(__name__)
 
 
-def _post_auth_url(profile) -> str:
-    """Return the URL the user should land on after a successful login."""
+def post_auth_url(profile) -> str:
+    """Return the URL the user should land on after a successful login, or when
+    an unfinished profile is opened: the profile itself only once completed."""
     state = profile.onboarding_state or "intro"
     if state == "completed":
         return url_for("profiles.view_profile", profile_id=profile.id)
@@ -102,7 +103,7 @@ def verify():
         session.pop("pending_phone", None)
         session["profile_id"] = profile.id
 
-        return redirect(_post_auth_url(profile))
+        return redirect(post_auth_url(profile))
 
     debug_code = session.pop("debug_code", None)
     return render_template("auth/verify.html", phone=phone, debug_code=debug_code)

@@ -8,6 +8,7 @@ from blueprints.auth.decorators import profile_owner_required
 from services.stt_service import transcribe_audio, SpeechToTextError
 from services.nlp_service import extract_profile_data, ExtractionError
 from services.recording_service import save_take, record_result, mark_decision
+from services.profile_service import COMPLETED
 import re
 import logging
 
@@ -47,6 +48,14 @@ VOICE_STEPS = ["name", "story", "availability"]
 
 # How long (seconds) the worker may speak per voice step. Story is capped at 3 min.
 STEP_MAX_SECONDS = {"story": 180}
+
+
+def _advance(profile, state):
+    """Record onboarding progress. A completed profile stays completed while it's
+    re-edited (e.g. "Re-record story"): the state gates whether it's public, and the
+    step-to-step flow runs on each response's next_url, not on the stored state."""
+    if profile.onboarding_state != COMPLETED:
+        profile.onboarding_state = state
 
 
 def clean_transcribed_name(transcription: str) -> str:
@@ -203,7 +212,7 @@ def name_transcribe(profile_id):
     # Persist the cleaned name and raw transcript, then move state forward.
     profile.name = cleaned_name
     profile.transcripts = {**(profile.transcripts or {}), "name": transcript}
-    profile.onboarding_state = "name_confirm"
+    _advance(profile, "name_confirm")
     db.session.commit()
 
     return jsonify({
@@ -261,7 +270,7 @@ def confirm_name(profile_id):
                 return jsonify({"error": "Name cannot be empty"}), 400
             profile.name = edited_text
 
-        profile.onboarding_state = "story"
+        _advance(profile, "story")
         db.session.commit()
 
         return jsonify({
@@ -271,7 +280,7 @@ def confirm_name(profile_id):
     else:
         # Reset so the user can try again
         profile.name = None
-        profile.onboarding_state = "name"
+        _advance(profile, "name")
         db.session.commit()
 
         return jsonify({
@@ -335,7 +344,7 @@ def voice_transcribe(profile_id, step):
     record_result(take_id, transcript=transcript)
 
     profile.transcripts = {**(profile.transcripts or {}), step: transcript}
-    profile.onboarding_state = step
+    _advance(profile, step)
     db.session.commit()
 
     return jsonify({
@@ -382,12 +391,12 @@ def voice_confirm(profile_id, step):
                 logger.error("Profile extraction failed for %d: %s", profile.id, e)
                 profile.profile_data = {"extraction_error": str(e)}
 
-            profile.onboarding_state = "review"
+            _advance(profile, "review")
             db.session.commit()
             next_url = url_for("onboarding.review_step", profile_id=profile.id)
         else:
             next_step = VOICE_STEPS[step_index + 1]
-            profile.onboarding_state = next_step
+            _advance(profile, next_step)
             db.session.commit()
             next_url = url_for("onboarding.voice_step", profile_id=profile.id, step=next_step)
 

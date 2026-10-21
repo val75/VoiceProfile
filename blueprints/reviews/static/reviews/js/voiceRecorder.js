@@ -151,9 +151,10 @@
         const response = await fetch('/voice/transcribe', { method: 'POST', body: formData });
 
         // Error replies (429 rate limit, 413 too long, 502 Whisper) carry a readable
-        // message in { error }; only fall back to the bare status if they don't.
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok && !data.error) throw new Error(`Server error: ${response.status}`);
+        // message in { error }. A reply that isn't our JSON at all (e.g. a proxy's
+        // HTML page, even with a 200) is a failure, so the take is kept for a retry.
+        const data = await response.json().catch(() => null);
+        if (!data || (!response.ok && !data.error)) throw new Error(`Server error: ${response.status}`);
 
         if (data.error) {
           this.updateStatus(`Error: ${data.error}`, 'error');

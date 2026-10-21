@@ -71,9 +71,10 @@ def check_transcribe_rate_limit(ip: Optional[str]) -> Optional[str]:
     now = datetime.now(timezone.utc)
     hour_ago = now - timedelta(hours=1)
 
-    # Housekeeping: rows outside the window never count, so keep the table bounded.
+    # Housekeeping: drop this IP's rows older than the window (as the OTP limit does
+    # per phone), so the hot path never takes a table-wide delete.
     TranscribeRequest.query.filter(
-        TranscribeRequest.created_at < hour_ago
+        TranscribeRequest.ip == ip, TranscribeRequest.created_at < hour_ago
     ).delete(synchronize_session=False)
 
     if TranscribeRequest.query.filter(

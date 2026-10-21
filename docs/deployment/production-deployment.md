@@ -765,13 +765,31 @@ caller in the app; prod access log showed no hits in 30 days):
   blueprint), `GET /onboarding/question/<id>`, `POST /onboarding/transcribe`: free STT/LLM
   runs and phone-less profile rows. Their dead templates/static went with them.
 
-`POST /voice/transcribe` stays public (anonymous voice reviews need it) but is now capped:
-`TRANSCRIBE_MAX_BYTES` (default 10 MB → 413, quota untouched) and a per-IP hourly limit
-`TRANSCRIBE_MAX_PER_IP_PER_HOUR` (default 30 → 429), Postgres-backed like the OTP limit via
-the `transcribe_requests` table (migration `f2a8d6c4b913`). The review page now shows the
-server's error message instead of a bare status code.
+- **Re-editing:** once completed, a profile stays completed while the worker re-records a step
+  (Edit profile → "Re-record story"); the onboarding steps no longer move its state backwards,
+  which would otherwise take `/p/<id>` (and their printed QR code) offline mid-edit.
 
-**Before rollout, check prod for planted or orphaned rows** (read-only; lists, never deletes):
+`POST /voice/transcribe` stays public (anonymous voice reviews need it) but is now capped:
+a per-IP hourly limit `TRANSCRIBE_MAX_PER_IP_PER_HOUR` (default 30 → 429), Postgres-backed
+like the OTP limit via the `transcribe_requests` table (migration `f2a8d6c4b913`), checked
+before the body is read so every call counts; then a per-request body cap
+`TRANSCRIBE_MAX_BYTES` (default 10 MB, whole request → 413), so Werkzeug stops reading an
+oversized upload instead of spooling it. The cap is scoped to this route; onboarding uploads
+are unaffected. The review page now shows the server's error message instead of a bare status
+code, and treats a non-JSON reply (e.g. a proxy page) as a failure, keeping the take.
+
+**Before rollout, check prod for planted rows.** The strongest evidence is the access log, over
+everything journald still holds (no `--since`); no output means no call to the removed
+`POST /profiles/` was logged (a 30-day check on 2026-10-21 found none):
+
+```bash
+journalctl -u voiceprofile | grep -E '"POST /profiles/? HTTP'
+```
+
+Then a read-only heuristic over the data (lists, never deletes). It **cannot prove** a row wasn't
+planted: that endpoint accepted any column (`sms_consent_at`, `created_at`, …), and anyone can
+add an `otp_requests` row for a number just by requesting a code for it. It does catch a planted
+row that only set the obvious fields, and the phone-less rows `/voice/upload` made:
 
 ```sql
 SELECT p.id, p.name, p.phone_number, p.onboarding_state, p.created_at, p.sms_consent_at,
@@ -822,8 +840,8 @@ Rollout per host: pull, `flask db upgrade`, restart. New env keys are optional (
   Follow-up C.
 - [ ] **Raw voice recordings follow-ups R1–R9** — minor; R1 (decision on the wrong take)
   and R4 (export file permissions) first.
-- [ ] **Planted/orphaned profile check** — run the read-only query under "Unfinished
-  profiles + unauthenticated endpoints" on prod before that rollout.
+- [ ] **Planted/orphaned profile check** — full-retention access-log grep, then the read-only
+  query, under "Unfinished profiles + unauthenticated endpoints", on prod before that rollout.
 
 ### Resolved during setup
 

@@ -1,5 +1,8 @@
 """An unfinished profile is never rendered as a profile: the owner is sent back
 into onboarding, and the public page / review form / photo 404 until completed."""
+import io
+from unittest.mock import patch
+
 import pytest
 
 from models.review import Review
@@ -64,6 +67,40 @@ def test_public_pages_404_until_completed(client, make_profile, path):
 def test_public_pages_served_once_completed(client, make_profile, path):
     p = make_profile(onboarding_state="completed", photo=b"jpeg", photo_mime="image/jpeg")
     assert client.get(path.format(id=p.id)).status_code == 200
+
+
+def _record(client, pid, step):
+    url = f"/onboarding/{pid}/name/transcribe" if step == "name" \
+        else f"/onboarding/{pid}/{step}/transcribe"
+    with patch("blueprints.onboarding.routes.transcribe_audio", return_value="Ana Pop"):
+        return client.post(url, data={"audio": (io.BytesIO(b"abc"), "voice.webm", "audio/webm")},
+                           content_type="multipart/form-data")
+
+
+@pytest.mark.parametrize("step, confirm", [
+    ("name", {"confirmed": True}),
+    ("name", {"confirmed": False}),
+    ("story", {"confirmed": True}),
+    ("story", {"confirmed": False}),
+])
+def test_rerecording_a_step_keeps_a_completed_profile_public(client, make_profile, login,
+                                                             step, confirm):
+    # e.g. Edit profile -> "Re-record story": the profile must stay live while it's edited.
+    p = login(make_profile(onboarding_state="completed"))
+    assert _record(client, p.id, step).status_code == 200
+    confirm_url = f"/onboarding/{p.id}/{step}/confirm"
+    assert client.post(confirm_url, json=confirm).status_code == 200
+    assert p.onboarding_state == "completed"
+    assert client.get(f"/p/{p.id}").status_code == 200
+    assert client.get(f"/profiles/{p.id}/view").status_code == 200
+
+
+def test_unfinished_profile_still_advances(client, make_profile, login):
+    p = login(make_profile(name=None, onboarding_state="name"))
+    _record(client, p.id, "name")
+    assert p.onboarding_state == "name_confirm"
+    client.post(f"/onboarding/{p.id}/name/confirm", json={"confirmed": True})
+    assert p.onboarding_state == "story"
 
 
 def test_review_cannot_be_posted_on_unfinished_profile(client, make_profile):

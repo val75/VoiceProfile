@@ -223,6 +223,12 @@ def test_edit_profile_ignores_an_abandoned_draft(client, make_profile, login):
     assert "Welder" in page and "Cook" not in page
 
 
+def test_an_empty_draft_is_still_the_draft(client, make_profile, login):
+    p = login(make_profile(onboarding_state="completed", profile_data=LIVE,
+                           profile_data_draft={}))
+    assert "Welder" not in _review_page_data(client, p.id, "?draft=1")
+
+
 def test_failed_name_take_drops_an_earlier_pending_one(client, make_profile, login):
     from services.stt_service import SpeechToTextError
     p = login(make_profile(name="Maria Lopez", onboarding_state="completed"))

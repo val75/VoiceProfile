@@ -777,13 +777,39 @@ caller in the app; prod access log showed no hits in 30 days):
 - **Re-edited profile data:** the extraction from a completed profile's re-edit (and the review
   page's re-extract) goes to `profiles.profile_data_draft` (migration `a9d3f6b1c724`); the
   re-edit flow lands on `/review?draft=1`, which shows the draft, and saving publishes it.
-  Edit profile (no flag) always shows the live data, so an abandoned draft never comes back,
+  Edit profile (no flag) always shows the live data, so it never offers an abandoned draft,
   and a failed extraction shows the live data with the retry banner. Before, it overwrote the public
   `profile_data` (or replaced it with an extraction error) before the worker had reviewed it.
   Unfinished profiles aren't public and still write `profile_data` directly.
 - **Confirm screen errors:** a refused confirm (empty or too-long edit, no pending name) now
   shows the server's message by the buttons and re-enables them; it used to say "Saved!"
   and leave the buttons disabled.
+
+Known gaps, left by decision (none is a regression from before this change):
+
+- **Abandoned draft via `?draft=1`.** A draft is cleared only by saving the review page or
+  replaced by the next re-edit. Reloading the abandoned `/review?draft=1` tab, or reaching
+  it from history, shows it again. It is the worker's own extraction of their latest
+  recording, shown for review before any save; Edit profile never offers it.
+- **Transcripts aren't staged.** A re-edit writes `transcripts[step]` at transcribe time, and
+  rejecting the take removes it, so the previous story transcript is lost. After an abandoned
+  re-edit, "Re-extract from Transcripts" on Edit profile extracts the abandoned take. The
+  fix is a transcript draft alongside `profile_data_draft` (follow-up).
+- **Re-extract on Edit profile isn't kept across a reload.** Its result fills the form and is
+  stored as the draft, but the flagless page shows live data again, like any unsaved edit.
+- **Draft flag details:** any non-empty `draft` value counts (`?draft=0` too; nothing links
+  that), and first-time sign-ups also land on `?draft=1`, where it has no effect.
+- **Name:** a confirmed re-recorded name goes public at once (confirming it is its review; no
+  button offers a name re-record on a completed profile). Two tabs recording names: the
+  last take wins. A malformed confirm body (no JSON, non-string `edited_text`) 500s.
+- **Confirm screen, expired session:** the login redirect isn't JSON, so the worker sees
+  "Something went wrong. Please try again." (it said "Network error" before).
+- **Admin extraction-error count** covers unfinished profiles only, so a failed re-edit
+  (held in the draft) isn't counted; it never counted completed profiles.
+- **Transcribe limiter:** best-effort under concurrency (a few requests in flight can pass the
+  cap); a 502 still uses quota; the table-wide prune can briefly wait on another request's
+  delete (milliseconds, committed before the Whisper call); an early 413 may reach a browser
+  as a connection reset (only uploads over 10 MB).
 
 `POST /voice/transcribe` stays public (anonymous voice reviews need it) but is now capped:
 a per-IP hourly limit `TRANSCRIBE_MAX_PER_IP_PER_HOUR` (default 30 → 429), Postgres-backed

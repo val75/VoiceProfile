@@ -457,11 +457,11 @@ def review_step(profile_id):
     profile = WorkerProfile.query.get_or_404(profile_id)
     profile_data = profile.profile_data or {}
     # A re-edit arrives with ?draft=1 to show its unsaved extraction. Edit profile (no flag)
-    # shows the live data, so an abandoned draft never resurfaces; a failed one shows the
+    # shows the live data, so it never offers an abandoned draft; a failed one shows the
     # live data with the error banner rather than an empty form.
     draft = profile.profile_data_draft if request.args.get("draft") else None
-    has_error = "extraction_error" in (draft or profile_data)
-    if draft and not has_error:
+    has_error = "extraction_error" in (draft if draft is not None else profile_data)
+    if draft is not None and not has_error:
         profile_data = draft
 
     return render_template(

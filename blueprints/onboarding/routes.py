@@ -212,6 +212,9 @@ def name_transcribe(profile_id):
     """Receive the audio, transcribe it, and hold the name until the worker confirms it."""
     profile = WorkerProfile.query.get_or_404(profile_id)
 
+    # A new take replaces any earlier one, so a failed take can't leave the old one confirmable.
+    session.pop(PENDING_NAME_KEY, None)
+
     if "audio" not in request.files:
         return jsonify({"error": "Missing audio file"}), 400
 
@@ -223,9 +226,6 @@ def name_transcribe(profile_id):
         return jsonify({"error": str(e)}), 502
 
     cleaned_name = clean_transcribed_name(transcript)
-
-    # A failed take must not leave an earlier one confirmable.
-    session.pop(PENDING_NAME_KEY, None)
     if not cleaned_name:
         return jsonify({"error": "We didn't catch a name. Please try again."}), 400
     if len(cleaned_name) > NAME_MAX_LENGTH:
@@ -424,7 +424,7 @@ def voice_confirm(profile_id, step):
 
             _advance(profile, "review")
             db.session.commit()
-            next_url = url_for("onboarding.review_step", profile_id=profile.id)
+            next_url = url_for("onboarding.review_step", profile_id=profile.id, draft=1)
         else:
             next_step = VOICE_STEPS[step_index + 1]
             _advance(profile, next_step)
@@ -455,11 +455,14 @@ def voice_confirm(profile_id, step):
 def review_step(profile_id):
     """Render the profile review page with extracted structured data."""
     profile = WorkerProfile.query.get_or_404(profile_id)
-    # An unsaved re-edit shows its draft; the public page keeps showing profile_data.
-    profile_data = profile.profile_data_draft
-    if profile_data is None:
-        profile_data = profile.profile_data or {}
-    has_error = "extraction_error" in profile_data
+    profile_data = profile.profile_data or {}
+    # A re-edit arrives with ?draft=1 to show its unsaved extraction. Edit profile (no flag)
+    # shows the live data, so an abandoned draft never resurfaces; a failed one shows the
+    # live data with the error banner rather than an empty form.
+    draft = profile.profile_data_draft if request.args.get("draft") else None
+    has_error = "extraction_error" in (draft or profile_data)
+    if draft and not has_error:
+        profile_data = draft
 
     return render_template(
         "onboarding/review.html",

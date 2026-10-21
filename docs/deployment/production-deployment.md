@@ -776,7 +776,9 @@ caller in the app; prod access log showed no hits in 30 days):
   screen during the deploy sees "Please record your name first" by the buttons and re-records.
 - **Re-edited profile data:** the extraction from a completed profile's re-edit (and the review
   page's re-extract) goes to `profiles.profile_data_draft` (migration `a9d3f6b1c724`); the
-  review page shows the draft and saving it publishes it. Before, it overwrote the public
+  re-edit flow lands on `/review?draft=1`, which shows the draft, and saving publishes it.
+  Edit profile (no flag) always shows the live data, so an abandoned draft never comes back,
+  and a failed extraction shows the live data with the retry banner. Before, it overwrote the public
   `profile_data` (or replaced it with an extraction error) before the worker had reviewed it.
   Unfinished profiles aren't public and still write `profile_data` directly.
 - **Confirm screen errors:** a refused confirm (empty or too-long edit, no pending name) now

@@ -184,17 +184,18 @@ def _confirm_availability(client, pid, **extract):
         return client.post(f"/onboarding/{pid}/availability/confirm", json={"confirmed": True})
 
 
-def _review_page_data(client, pid):
-    return client.get(f"/onboarding/{pid}/review").get_data(as_text=True)
+def _review_page_data(client, pid, query=""):
+    return client.get(f"/onboarding/{pid}/review{query}").get_data(as_text=True)
 
 
 def test_reedit_extraction_waits_for_the_review_save(client, make_profile, login):
     p = login(make_profile(onboarding_state="completed", profile_data=LIVE,
                            transcripts={"story": "I cook", "availability": "weekends"}))
-    assert _confirm_availability(client, p.id, return_value=FRESH).status_code == 200
+    resp = _confirm_availability(client, p.id, return_value=FRESH)
+    assert resp.get_json()["next_url"] == f"/onboarding/{p.id}/review?draft=1"
     assert p.profile_data == LIVE and p.profile_data_draft == FRESH
     assert "Welder" in _public_name(client, p.id)
-    assert "Cook, 2 years" in _review_page_data(client, p.id)
+    assert "Cook, 2 years" in _review_page_data(client, p.id, "?draft=1")
 
     resp = client.post(f"/onboarding/{p.id}/review", json=FRESH)
     assert resp.status_code == 200
@@ -210,6 +211,31 @@ def test_reedit_extraction_failure_leaves_the_public_profile(client, make_profil
     assert p.profile_data == LIVE
     assert "extraction_error" in p.profile_data_draft
     assert "Welder" in _public_name(client, p.id)
+    # The review page offers a retry over the live data, not an empty form to save.
+    page = _review_page_data(client, p.id, "?draft=1")
+    assert "We had trouble extracting" in page and "Welder" in page
+
+
+def test_edit_profile_ignores_an_abandoned_draft(client, make_profile, login):
+    p = login(make_profile(onboarding_state="completed", profile_data=LIVE,
+                           profile_data_draft=FRESH))
+    page = _review_page_data(client, p.id)  # Edit profile's link has no draft flag
+    assert "Welder" in page and "Cook" not in page
+
+
+def test_failed_name_take_drops_an_earlier_pending_one(client, make_profile, login):
+    from services.stt_service import SpeechToTextError
+    p = login(make_profile(name="Maria Lopez", onboarding_state="completed"))
+    _record(client, p.id, "name", heard="Ana Pop")
+    with patch("blueprints.onboarding.routes.transcribe_audio",
+               side_effect=SpeechToTextError("timeout")):
+        resp = client.post(f"/onboarding/{p.id}/name/transcribe",
+                           data={"audio": (io.BytesIO(b"abc"), "voice.webm", "audio/webm")},
+                           content_type="multipart/form-data")
+    assert resp.status_code == 502
+    assert client.post(f"/onboarding/{p.id}/name/confirm",
+                       json={"confirmed": True}).status_code == 400
+    assert p.name == "Maria Lopez"
 
 
 def test_reedit_re_extract_goes_to_the_draft(client, make_profile, login):

@@ -52,6 +52,9 @@ STEP_MAX_SECONDS = {"story": 180}
 # Session key for a name take awaiting the worker's confirmation.
 PENDING_NAME_KEY = "pending_name_transcript"
 
+# Longest name profiles.name holds (also keeps a pending take small in the session cookie).
+NAME_MAX_LENGTH = WorkerProfile.__table__.c.name.type.length
+
 
 def _advance(profile, state):
     """Record onboarding progress. A completed profile stays completed while it's
@@ -59,6 +62,15 @@ def _advance(profile, state):
     step-to-step flow runs on each response's next_url, not on the stored state."""
     if profile.onboarding_state != COMPLETED:
         profile.onboarding_state = state
+
+
+def _set_extracted(profile, data):
+    """Store fresh extraction output. A completed profile is public, so a re-edit's
+    output waits in profile_data_draft until the worker saves the review page."""
+    if profile.onboarding_state == COMPLETED:
+        profile.profile_data_draft = data
+    else:
+        profile.profile_data = data
 
 
 def clean_transcribed_name(transcription: str) -> str:
@@ -212,6 +224,13 @@ def name_transcribe(profile_id):
 
     cleaned_name = clean_transcribed_name(transcript)
 
+    # A failed take must not leave an earlier one confirmable.
+    session.pop(PENDING_NAME_KEY, None)
+    if not cleaned_name:
+        return jsonify({"error": "We didn't catch a name. Please try again."}), 400
+    if len(cleaned_name) > NAME_MAX_LENGTH:
+        return jsonify({"error": "Please say just your name."}), 400
+
     # The name is public, so a re-recorded one must not replace it before it's
     # confirmed: keep the take in the session; confirm_name saves it.
     session[PENDING_NAME_KEY] = transcript
@@ -275,6 +294,8 @@ def confirm_name(profile_id):
             edited_text = edited_text.strip()
             if not edited_text:
                 return jsonify({"error": "Name cannot be empty"}), 400
+            if len(edited_text) > NAME_MAX_LENGTH:
+                return jsonify({"error": "That name is too long."}), 400
 
         session.pop(PENDING_NAME_KEY)
         profile.name = edited_text if edited_text is not None else clean_transcribed_name(transcript)
@@ -395,10 +416,11 @@ def voice_confirm(profile_id, step):
 
         if is_last:
             try:
-                profile.profile_data = extract_profile_data(profile.transcripts or {})
+                extracted = extract_profile_data(profile.transcripts or {})
             except ExtractionError as e:
                 logger.error("Profile extraction failed for %d: %s", profile.id, e)
-                profile.profile_data = {"extraction_error": str(e)}
+                extracted = {"extraction_error": str(e)}
+            _set_extracted(profile, extracted)
 
             _advance(profile, "review")
             db.session.commit()
@@ -433,7 +455,10 @@ def voice_confirm(profile_id, step):
 def review_step(profile_id):
     """Render the profile review page with extracted structured data."""
     profile = WorkerProfile.query.get_or_404(profile_id)
-    profile_data = profile.profile_data or {}
+    # An unsaved re-edit shows its draft; the public page keeps showing profile_data.
+    profile_data = profile.profile_data_draft
+    if profile_data is None:
+        profile_data = profile.profile_data or {}
     has_error = "extraction_error" in profile_data
 
     return render_template(
@@ -455,6 +480,7 @@ def save_review(profile_id):
         return jsonify({"error": "Missing profile data"}), 400
 
     profile.profile_data = data
+    profile.profile_data_draft = None
     profile.onboarding_state = "completed"
     db.session.commit()
 
@@ -468,8 +494,9 @@ def re_extract(profile_id):
     profile = WorkerProfile.query.get_or_404(profile_id)
 
     try:
-        profile.profile_data = extract_profile_data(profile.transcripts or {})
+        extracted = extract_profile_data(profile.transcripts or {})
+        _set_extracted(profile, extracted)
         db.session.commit()
-        return jsonify({"success": True, "profile_data": profile.profile_data})
+        return jsonify({"success": True, "profile_data": extracted})
     except ExtractionError as e:
         return jsonify({"error": str(e)}), 502

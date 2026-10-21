@@ -770,12 +770,23 @@ caller in the app; prod access log showed no hits in 30 days):
   which would otherwise take `/p/<id>` (and their printed QR code) offline mid-edit.
 - **Name re-recording:** a recorded name is held in the session and saved only on confirm
   (edited text wins); rejecting it leaves the saved name as it was. Before, the new take
-  replaced the public name immediately and a reject blanked it. A worker sitting on the name
-  confirm screen during the deploy just gets "Please record your name first" and re-records.
+  replaced the public name immediately and a reject blanked it. A take that cleans to nothing
+  or to more than the 120-character `name` column is refused at transcribe ("Please say just
+  your name"; before, an over-long one 500'd on save). A worker sitting on the name confirm
+  screen during the deploy sees "Please record your name first" by the buttons and re-records.
+- **Re-edited profile data:** the extraction from a completed profile's re-edit (and the review
+  page's re-extract) goes to `profiles.profile_data_draft` (migration `a9d3f6b1c724`); the
+  review page shows the draft and saving it publishes it. Before, it overwrote the public
+  `profile_data` (or replaced it with an extraction error) before the worker had reviewed it.
+  Unfinished profiles aren't public and still write `profile_data` directly.
+- **Confirm screen errors:** a refused confirm (empty or too-long edit, no pending name) now
+  shows the server's message by the buttons and re-enables them; it used to say "Saved!"
+  and leave the buttons disabled.
 
 `POST /voice/transcribe` stays public (anonymous voice reviews need it) but is now capped:
 a per-IP hourly limit `TRANSCRIBE_MAX_PER_IP_PER_HOUR` (default 30 → 429), Postgres-backed
-like the OTP limit via the `transcribe_requests` table (migration `f2a8d6c4b913`), checked
+like the OTP limit via the `transcribe_requests` table (migration `f2a8d6c4b913`; rows
+older than the hour are pruned table-wide on each call), checked
 before the body is read so every call counts; then a per-request body cap
 `TRANSCRIBE_MAX_BYTES` (default 10 MB, whole request → 413), so Werkzeug stops reading an
 oversized upload instead of spooling it. The cap is scoped to this route; onboarding uploads

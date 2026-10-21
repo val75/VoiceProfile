@@ -211,12 +211,18 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
-                const data = await res.json();
+                const data = await res.json().catch(() => ({}));
 
-                if (data.next_url) {
+                if (res.ok && data.next_url) {
                     window.location.href = data.next_url;
                 } else {
-                    statusEl.textContent = 'Saved!';
+                    // e.g. "Please record your name first.": keep the take and say why.
+                    if (isLastStep) {
+                        hideBuilding();
+                    }
+                    statusEl.textContent = 'Does this look right?';
+                    showConfirmError(data.error || 'Something went wrong. Please try again.');
+                    setConfirmBtnsDisabled(false);
                 }
             } catch (err) {
                 if (isLastStep) {

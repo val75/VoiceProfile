@@ -69,6 +69,16 @@ def test_transcribe_window_expires(app, client, session):
     assert TranscribeRequest.query.count() == 1  # stale row cleaned up
 
 
+def test_stale_rows_of_other_ips_are_pruned(client, session):
+    # IPs that never come back must not leave their rows behind forever.
+    stale = datetime.now(timezone.utc) - timedelta(hours=2)
+    session.add(TranscribeRequest(ip="198.51.100.7", created_at=stale))
+    session.commit()
+    with patch(WHISPER, return_value="ok"):
+        assert _transcribe(client).status_code == 200
+    assert [r.ip for r in TranscribeRequest.query.all()] == ["203.0.113.5"]
+
+
 def test_transcribe_rejects_oversized_audio(app, client):
     app.config["TRANSCRIBE_MAX_BYTES"] = 1000  # whole request body, multipart overhead included
     with patch(WHISPER, return_value="ok") as whisper:

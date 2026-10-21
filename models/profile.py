@@ -25,6 +25,9 @@ class WorkerProfile(db.Model):
 
     # Flexible AI profile
     profile_data = db.Column(_JSONB)
+    # Extraction from a re-edit of a completed (public) profile, held until the worker
+    # saves the review page; profile_data stays what the public page shows meanwhile.
+    profile_data_draft = db.Column(_JSONB)
     transcripts = db.Column(_JSONB)
 
     # Profile photo (resized JPEG). Deferred so the bytes load only when served.

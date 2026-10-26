@@ -147,7 +147,7 @@ def extract_profile_data(transcripts: dict, model: str = None, base_url: str = N
     config = current_app.config
     client = OpenAI(
         base_url=base_url or config["LLM_URL"],
-        api_key="ollama",
+        api_key=config["LLM_API_KEY"],
     )
     model = model or config["LLM_MODEL"]
     timeout = config["LLM_TIMEOUT"]

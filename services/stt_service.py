@@ -46,10 +46,16 @@ def transcribe_audio(file_storage):
             timeout=90,
         )
     except requests.RequestException as e:
+        current_app.logger.error("Whisper unreachable at %s: %s", whisper_url, e)
         raise SpeechToTextError("Whisper service unreachable") from e
 
     if response.status_code != 200:
-        raise SpeechToTextError(response.text)
+        # The cause goes to the log; str(e) reaches the browser, so keep it generic.
+        current_app.logger.error(
+            "Whisper returned HTTP %s: %r",
+            response.status_code, response.text[:1000],
+        )
+        raise SpeechToTextError(f"Whisper error (HTTP {response.status_code})")
 
     data = response.json()
     if not isinstance(data, dict) or data.get("text") is None:

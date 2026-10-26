@@ -6,7 +6,7 @@ behind each decision** so the reasoning isn't lost.
 
 **Status:** in progress
 **Branch:** `chore/production-deploy`
-**Last updated:** 2026-08-05
+**Last updated:** 2026-10-26
 
 ---
 
@@ -25,8 +25,13 @@ URL or the Cloudflare setup.
 Two bare-metal Ubuntu servers:
 
 - **App server** — runs the Flask app + PostgreSQL.
-- **DGX-2** — runs Whisper (speech-to-text) and the LLM (profile extraction),
-  reachable from the app server over a private link. Never internet-exposed.
+- **DGX-2** — runs Whisper (speech-to-text, `:6000`) and the LLM (vLLM, `:8000`),
+  which the app server reaches over the private network (`192.168.100.0/24`, DGX at
+  `192.168.100.2`). **The DGX also has a public IP**, so it is protected three ways
+  (see "DGX exposure incident" in the change log):
+  - **Firewall.** ufw denies all incoming traffic except SSH and `192.168.100.0/24`.
+  - **Private bind.** Both services listen on `192.168.100.2` only, never `0.0.0.0`.
+  - **API keys.** Whisper checks `X-API-Key`; vLLM checks `Authorization: Bearer` on `/v1/*`.
 
 Public traffic reaches the app entirely through a **Cloudflare Tunnel**
 (`cloudflared`), so there are no inbound ports open on the app server and TLS
@@ -229,6 +234,15 @@ restored can be silently truncated, mis-permissioned, or version-incompatible.
 The runbook restores into a scratch database precisely so a real recovery isn't
 the first time that path has ever run.
 
+**Alerting: a dead man's switch.** A backup that fails quietly is as bad as no
+backup (the off-box copy failed every night for weeks in 2026 and nobody
+noticed). Each run reports its exit status to a healthchecks.io check
+(`HEALTHCHECK_URL` in `.env`). healthchecks.io's own servers email you when a run
+reports failure **or when no report arrives on time**. The second case is the point:
+a disabled timer, a dead server or a broken script all mean "no ping", and the app
+server doesn't have to be healthy enough to notice. It sends no email itself; it
+only makes one outbound HTTPS request.
+
 **Privacy policy coupling:** `templates/privacy.html` promises deleted data leaves backups
 "within 14 days". The prune deletes dumps older than `RETENTION_DAYS` minus one hour
 (`-mmin`, not `-mtime`, which rounds down and kept dumps an extra day). If `RETENTION_DAYS`
@@ -379,10 +393,15 @@ is produced and `pg_restore --list` shows all tables (`profiles`, `reviews`,
 ```bash
 # 1. One-time: SSH key from the app server to the DGX (as cato-user)
 ssh-keygen -t ed25519 -f ~/.ssh/voiceprofile_backup -N ""
-ssh-copy-id -i ~/.ssh/voiceprofile_backup.pub cato-user@<DGX_HOST>
+cat ~/.ssh/voiceprofile_backup.pub
+#    ssh-copy-id can't work here: the DGX has password auth off. Instead, on the
+#    DGX, append the key to ~/.ssh/authorized_keys, limited to the private network
+#    and with no forwarding or pty:
+#      from="192.168.100.0/24",restrict ssh-ed25519 AAAA... voiceprofile-backup
 ssh -i ~/.ssh/voiceprofile_backup cato-user@<DGX_HOST> 'echo ok'   # test
 
-# 2. Install the units (set DGX_HOST in the .service first)
+# 2. Install the units (set DGX_HOST in the .service first; keep
+#    DGX_DIR=/data/backups/voiceprofile, not the DGX's root disk)
 sudo cp deploy/voiceprofile-backup.service /etc/systemd/system/
 sudo cp deploy/voiceprofile-backup.timer   /etc/systemd/system/
 sudoedit /etc/systemd/system/voiceprofile-backup.service   # set DGX_HOST
@@ -397,6 +416,16 @@ ssh -i ~/.ssh/voiceprofile_backup cato-user@<DGX_HOST> 'ls -lh /data/backups/voi
 # 4. Enable the nightly timer
 sudo systemctl enable --now voiceprofile-backup.timer
 systemctl list-timers voiceprofile-backup.timer
+
+# 5. Failure alerts (healthchecks.io, free). In their dashboard: add a check
+#    "voiceprofile backup", Period 1 day, Grace 4 hours, notify by email. Copy its
+#    ping URL into the app's .env (keep it private: whoever has it can fake "OK"):
+#      HEALTHCHECK_URL=https://hc-ping.com/<uuid>
+sudo systemctl start voiceprofile-backup.service
+journalctl -u voiceprofile-backup.service -n 5 --no-pager   # no "ping failed" warning
+#    the check turns green in the dashboard. Then prove the alert reaches you:
+curl -fsS "$(grep -E '^HEALTHCHECK_URL=' .env | cut -d= -f2-)/1"   # fake failure -> email
+sudo systemctl start voiceprofile-backup.service             # back to green
 ```
 
 #### Restore procedure (test it once, before you need it)
@@ -741,6 +770,102 @@ query selects only those columns).
 
 Rollout per host: pull, restart. No migration, no new env keys or dependencies.
 
+### DGX exposure incident + service hardening (2026-10-25) — rollout pending
+
+**What happened.** Prod onboarding showed "Couldn't turn that into text" on every
+recording. Whisper was returning a bare 500 because the DGX's `/` was full, and it
+writes each upload to `/tmp` first. The disk had filled because Ollama ran with
+`OLLAMA_HOST=0.0.0.0` and no auth on a box with a public IP. Its log showed `/api/pull`
+calls from many public IPs, and two models that weren't ours. One of them,
+`sysverify-63970`, was a renamed copy of our qwen2.5:32b (same blob), apparently a
+write probe. Whisper (`:6000`, had live connections from public IPs) and vLLM (`:8000`, `api_key=None`) were open
+the same way. This section's earlier text claimed the DGX was "never internet-exposed".
+
+Separately, **vLLM had been down since 2026-10-21 15:43 UTC**. Whisper, containerd and
+Ollama restarted around the same time. When vLLM's restart came, `:8000` was still
+held, so the bind failed with "Address already in use". systemd gave up after 3
+tries, and extraction failed for every worker until the 25th.
+
+**Containment (done on the box, 2026-10-25):**
+- **Firewall.** ufw is on: deny incoming, allow SSH, allow `192.168.100.0/24`.
+  Checked from outside: 6000, 8000 and 11434 are filtered.
+- **Ollama** is stopped and disabled; prod uses vLLM. Its log is saved to
+  `~/ollama-incident-2026-10-25.log` on the DGX. Foreign models were removed (only
+  `mistral:7b-instruct` remains), and the pip cache was cleared. `/` is at 50%.
+- **Compromise check came back clean.** Ollama is 0.32.6. Crontabs are clean and
+  there are no odd processes. `authorized_keys` holds only our keys, password auth
+  is off, there are no root keys, and the only accepted logins are ours.
+- **vLLM** was restarted (after ufw), and the app server reaches it again.
+- **Off-box backups were fixed.** They had failed every night with
+  `Permission denied (publickey)`: the backup key had never been authorized,
+  because `ssh-copy-id` can't work with password auth off. Separately, the installed
+  unit's `DGX_DIR` had drifted to the root disk. The key was added by hand (see
+  Section 5) and `DGX_DIR` restored to `/data/backups/voiceprofile`. Verified
+  2026-10-25 11:53.
+
+**Code (branch `fix/dgx-hardening`).** The firewall is no longer the only layer:
+- **Whisper requires its API key.** `whisper_service/app.py` checks `X-API-Key`
+  against `WHISPER_API_KEY` (read from `/etc/whisper.env`) and refuses to start
+  without it. The check is a middleware, so a stranger's upload is rejected before
+  it's read or written to disk.
+- **Whisper failures say why.** A failed upload or transcription returns a JSON
+  500 with the reason (e.g. `OSError: [Errno 28] No space left on device`) and
+  leaves no temp file behind. `services/stt_service.py` logs Whisper's status and
+  body, or the connection error. The browser still gets a generic message.
+- **vLLM requires a key.** The app sends `LLM_API_KEY` (new setting, default
+  `"ollama"` so lab and dev are unchanged). vLLM reads `VLLM_API_KEY` from
+  `/etc/vllm-qwen.env`, so it isn't visible in `ps`. vLLM 0.6.3 checks it only on
+  `/v1/*`; `/health`, `/metrics` and `/tokenize` stay open, which is why the
+  private bind matters.
+- **Both units bind `192.168.100.2`**, not `0.0.0.0`. Nothing on the DGX calls them
+  via localhost (checked).
+- **Backup alerts.** `deploy/backup_db.sh` reports every run's exit status to
+  healthchecks.io when `HEALTHCHECK_URL` is set in `.env` (Section 5, step 5).
+  Without it, behaviour is unchanged.
+- **Whisper deploys from a checkout.** Until now the DGX ran a hand-copied
+  `~/whisper_service/app.py` with no git checkout. The unit now runs
+  `~/VoiceProfile/whisper_service` (a clone) with the existing venv at
+  `~/whisper_service/venv`.
+
+#### Rollout (in this order, so nothing breaks partway)
+
+```bash
+# 1. App server: new key, then the code. vLLM ignores keys until step 3.
+python3 -c 'import secrets; print(secrets.token_urlsafe(32))'   # new LLM_API_KEY
+#    add LLM_API_KEY=<value> to .env
+git pull && sudo systemctl restart voiceprofile
+
+# 2. DGX, Whisper
+cd ~ && git clone https://github.com/val75/VoiceProfile.git      # public repo
+sudo install -m 600 -o root -g root /dev/null /etc/whisper.env
+sudoedit /etc/whisper.env        # WHISPER_API_KEY=<the app's existing value; if the app's
+                                 #   .env has none, add one there first and restart the app>
+systemctl cat whisper > ~/whisper.service.pre-hardening          # rollback copy
+sudo cp ~/VoiceProfile/whisper_service/whisper.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl restart whisper
+ss -ltnp | grep 6000             # 192.168.100.2:6000
+#    from the app server: curl without the key -> 401; then record in the app -> 200
+#    once good: mv ~/whisper_service/app.py ~/whisper_service/app.py.retired
+
+# 3. DGX, vLLM (a few minutes' extraction outage while the model reloads)
+systemctl cat vllm-qwen > ~/vllm-qwen.service.pre-hardening
+diff <(tail -n +2 ~/vllm-qwen.service.pre-hardening) ~/VoiceProfile/deploy/vllm-qwen.service
+#    expect only the key + host changes; carry over any box-specific values
+#    (CUDA_VISIBLE_DEVICES, HF_HOME) before installing
+sudo install -m 600 -o root -g root /dev/null /etc/vllm-qwen.env
+sudoedit /etc/vllm-qwen.env      # VLLM_API_KEY=<same value as the app's LLM_API_KEY>
+sudo cp ~/VoiceProfile/deploy/vllm-qwen.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl restart vllm-qwen
+journalctl -u vllm-qwen -f       # "Uvicorn running on http://192.168.100.2:8000"
+#    from the app server: curl http://192.168.100.2:8000/v1/models -> 401;
+#    with -H "Authorization: Bearer <key>" -> 200; then finish an onboarding
+
+# 4. App server: backup alerts. Section 5, step 5 (healthchecks.io check + .env).
+```
+
+Rollback: put back the saved `*.pre-hardening` unit, then `daemon-reload` and restart.
+If Ollama is ever re-enabled on the DGX, set `OLLAMA_HOST=127.0.0.1:11434`.
+
 ---
 
 ## Open items
@@ -759,9 +884,8 @@ Rollout per host: pull, restart. No migration, no new env keys or dependencies.
   (`voiceprofile.service`, enabled) behind the tunnel; DB was nuked and rebuilt
   from the clean initial migration; `/healthz` + the public site verified.
 - [x] **Backup setup** — done. `voiceprofile-backup.timer` runs nightly;
-  `pg_dump` copied off-box to the DGX at `/home/cato-user/backups/voiceprofile`
-  (home dir, since `/data` wasn't writable by `cato-user`). First dump verified
-  on the DGX.
+  `pg_dump` copied off-box to the DGX at `/data/backups/voiceprofile`. The off-box
+  copy silently failed for weeks until 2026-10-25 (see "DGX exposure incident").
 - [ ] **Test restore** — restore the latest dump into a scratch DB once to prove
   recovery (commands under Section 5 → Restore procedure).
 - [ ] **Merge to `main`** — fold `chore/production-deploy` into `main` so
@@ -772,6 +896,16 @@ Rollout per host: pull, restart. No migration, no new env keys or dependencies.
   Follow-up C.
 - [ ] **Raw voice recordings follow-ups R1–R9** — minor; R1 (decision on the wrong take)
   and R4 (export file permissions) first.
+- [ ] **DGX hardening rollout** — the runbook under "DGX exposure incident".
+- [ ] **Same exposure check on the lab box and the app server**:
+  `sudo ss -ltnp` (anything on `0.0.0.0` / `*` besides SSH?) and `sudo ufw status`.
+- [ ] **Backup failure alert** — code done (healthchecks.io); create the check and
+  set `HEALTHCHECK_URL` (Section 5, step 5).
+- [ ] **Hourly `ssh-rsa` rejects on the DGX** at :30:13 (`ssh-rsa not in
+  PubkeyAcceptedAlgorithms`) — find the source.
+- [ ] **The 2026-10-21 restart** — why Whisper, containerd, Ollama and vLLM all
+  restarted, and what held `:8000`.
+- [ ] **DGX `/` headroom** — `/` is a 98 GB LV; check `sudo vgs` for free space to grow it.
 
 ### Resolved during setup
 

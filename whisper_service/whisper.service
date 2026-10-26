@@ -31,6 +31,9 @@ EnvironmentFile=/etc/whisper.env
 # --host is the DGX's private-network address (check: ip -4 addr | grep 192.168.100),
 # never 0.0.0.0: the DGX also has a public IP. Only the app server calls this,
 # so nothing on the DGX itself can use localhost:6000.
+# Wait for that address first: binding it before the interface is up fails, and
+# network-online.target doesn't guarantee it. (Bounded by TimeoutStartSec.)
+ExecStartPre=/bin/sh -c 'until ip -4 -o addr show | grep -q " 192.168.100.2/"; do sleep 2; done'
 ExecStart=/home/cato-user/whisper_service/venv/bin/uvicorn app:app --host 192.168.100.2 --port 6000
 
 Restart=on-failure

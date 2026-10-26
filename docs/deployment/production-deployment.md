@@ -424,7 +424,7 @@ systemctl list-timers voiceprofile-backup.timer
 sudo systemctl start voiceprofile-backup.service
 journalctl -u voiceprofile-backup.service -n 5 --no-pager   # no "ping failed" warning
 #    the check turns green in the dashboard. Then prove the alert reaches you:
-curl -fsS "$(grep -E '^HEALTHCHECK_URL=' .env | cut -d= -f2-)/1"   # fake failure -> email
+curl -fsS https://hc-ping.com/<uuid>/1    # same URL as in .env, plus /1 -> email
 sudo systemctl start voiceprofile-backup.service             # back to green
 ```
 

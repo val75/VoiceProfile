@@ -9,11 +9,16 @@ without it.
 
 Deploy: see whisper_service/README.md.
 """
-from fastapi import FastAPI, UploadFile, File, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
+# request.form() yields Starlette's UploadFile and raises Starlette's
+# HTTPException (FastAPI's is a subclass) for a malformed body.
+from starlette.datastructures import UploadFile
+from starlette.exceptions import HTTPException as StarletteHTTPException
 import whisper
 import hmac
 import logging
+import shutil
 import tempfile
 import os
 
@@ -39,15 +44,24 @@ async def require_api_key(request: Request, call_next):
 
 
 @app.post("/transcribe")
-async def transcribe(file: UploadFile = File(...)):
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="No file provided")
-
-    fd, tmp_path = tempfile.mkstemp(suffix=".wav")
+async def transcribe(request: Request):
+    # The form is parsed here, not via a File(...) parameter: parsing spools
+    # uploads over 1 MB to /tmp, and a full disk must hit the except below
+    # (JSON 500 with the reason) rather than FastAPI's reasonless 400.
+    form = None
+    tmp_path = None
     try:
+        form = await request.form()
+        upload = form.get("file")
+        if not isinstance(upload, UploadFile) or not upload.filename:
+            raise HTTPException(status_code=400, detail="No file provided")
+
+        fd, tmp_path = tempfile.mkstemp(suffix=".wav")
         with os.fdopen(fd, "wb") as tmp:
-            tmp.write(await file.read())
+            shutil.copyfileobj(upload.file, tmp)
         result = model.transcribe(tmp_path)
+    except StarletteHTTPException:
+        raise  # 400s: no file, or a malformed body
     except Exception as e:
         # Say why (e.g. a full disk), so the app's log shows the cause.
         logger.exception("Transcription failed")
@@ -56,7 +70,10 @@ async def transcribe(file: UploadFile = File(...)):
             content={"detail": f"transcription failed: {type(e).__name__}: {e}"},
         )
     finally:
-        os.remove(tmp_path)
+        if tmp_path:
+            os.remove(tmp_path)
+        if form is not None:
+            await form.close()
 
     return {
         "text": result["text"],

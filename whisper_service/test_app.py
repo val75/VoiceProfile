@@ -117,18 +117,46 @@ def test_failed_transcribe_returns_json_500_and_removes_temp_file(monkeypatch, t
     assert list(tmp_tempdir.iterdir()) == []
 
 
-def test_failed_write_returns_json_500_and_removes_temp_file(monkeypatch, tmp_tempdir):
-    # The 2026-10-25 outage: the disk was full, so writing the upload failed.
-    module = load_app(monkeypatch)
+@pytest.fixture
+def unwritable_tempdir(monkeypatch, tmp_path):
+    """Stand-in for the 2026-10-25 full disk: nothing can be written to /tmp."""
+    ro = tmp_path / "ro"
+    ro.mkdir()
+    ro.chmod(0o500)
+    monkeypatch.setattr("tempfile.tempdir", str(ro))
+    yield ro
+    ro.chmod(0o700)
 
-    async def disk_full(self, size=-1):
-        raise OSError(28, "No space left on device")
 
-    monkeypatch.setattr("starlette.datastructures.UploadFile.read", disk_full)
-    client = TestClient(module.app, raise_server_exceptions=False)
+@pytest.mark.parametrize("size", [
+    500_000,    # kept in memory while parsing; fails when the handler writes it
+    2_000_000,  # over Starlette's 1 MB spool limit: fails while parsing the form
+])
+def test_unwritable_disk_returns_json_500_with_reason(monkeypatch, unwritable_tempdir, size):
+    client = TestClient(load_app(monkeypatch).app, raise_server_exceptions=False)
 
-    resp = post_audio(client, {"X-API-Key": KEY})
+    resp = client.post(
+        "/transcribe",
+        files={"file": ("take.webm", b"x" * size, "audio/webm")},
+        headers={"X-API-Key": KEY},
+    )
 
     assert resp.status_code == 500
-    assert "No space left on device" in resp.json()["detail"]
-    assert list(tmp_tempdir.iterdir()) == []
+    assert resp.json()["detail"].startswith("transcription failed: PermissionError")
+
+
+def test_malformed_body_with_key_is_400(monkeypatch):
+    client = TestClient(load_app(monkeypatch).app)
+    resp = client.post(
+        "/transcribe",
+        content=b"not multipart",
+        headers={"Content-Type": "multipart/form-data", "X-API-Key": KEY},
+    )
+    assert resp.status_code == 400
+
+
+def test_missing_file_is_400(monkeypatch):
+    client = TestClient(load_app(monkeypatch).app)
+    resp = client.post("/transcribe", data={"other": "x"}, headers={"X-API-Key": KEY})
+    assert resp.status_code == 400
+    assert resp.json() == {"detail": "No file provided"}

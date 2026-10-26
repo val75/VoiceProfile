@@ -61,6 +61,10 @@ EnvironmentFile=/etc/vllm-qwen.env
 # --host is the DGX's private-network address (check: ip -4 addr | grep 192.168.100),
 # never 0.0.0.0: the DGX also has a public IP, and /health, /metrics, /tokenize
 # don't check the API key. Nothing on the DGX may use localhost:8000.
+# Wait for that address first: binding it before the interface is up fails fast,
+# and 3 quick failures hit StartLimitBurst and leave vLLM stopped (as on
+# 2026-10-21). network-online.target doesn't guarantee the address.
+ExecStartPre=/bin/sh -c 'until ip -4 -o addr show | grep -q " 192.168.100.2/"; do sleep 2; done'
 ExecStart=/home/cato-user/vllm-venv/bin/vllm serve Qwen/Qwen2.5-32B-Instruct \
     --served-model-name qwen2.5-32b \
     --host 192.168.100.2 \

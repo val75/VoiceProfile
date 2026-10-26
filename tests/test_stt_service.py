@@ -1,6 +1,7 @@
 """stt_service: Whisper failures are logged with their cause, and the error
 raised for the browser stays generic."""
 import io
+import json
 import logging
 
 import pytest
@@ -15,6 +16,9 @@ class FakeResponse:
     def __init__(self, status_code, text):
         self.status_code = status_code
         self.text = text
+
+    def json(self):
+        return json.loads(self.text)
 
 
 def audio():
@@ -40,6 +44,23 @@ def test_non_200_is_logged_with_status_and_body(app, whisper_config, monkeypatch
     assert "No space left on device" in caplog.text
     # The browser gets the 502 JSON with str(e): no server internals in it.
     assert "No space left" not in str(exc.value)
+    # The admin recordings page stores .detail: Whisper's reason.
+    assert "No space left on device" in exc.value.detail
+
+
+def test_non_json_200_raises_stt_error(app, whisper_config, monkeypatch, caplog):
+    # e.g. a proxy's HTML page; must be the handled 502, not an unhandled 500.
+    monkeypatch.setattr(stt_service.requests, "post",
+                        lambda *a, **kw: FakeResponse(200, "<html>oops</html>"))
+
+    with caplog.at_level(logging.ERROR), pytest.raises(SpeechToTextError):
+        transcribe_audio(audio())
+
+    assert "<html>oops</html>" in caplog.text
+
+
+def test_detail_defaults_to_message():
+    assert SpeechToTextError("Whisper service unreachable").detail == "Whisper service unreachable"
 
 
 def test_connection_error_is_logged(app, whisper_config, monkeypatch, caplog):

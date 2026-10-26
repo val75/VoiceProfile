@@ -8,7 +8,7 @@
 #   # edit the <PLACEHOLDERS> below (GPU pin especially) to match the box, then:
 #   sudo systemctl daemon-reload
 #   sudo systemctl enable --now vllm-qwen
-#   journalctl -u vllm-qwen -f    # watch startup; ready at "Uvicorn running on http://0.0.0.0:8000"
+#   journalctl -u vllm-qwen -f    # watch startup; ready at "Uvicorn running on http://192.168.100.2:8000"
 #
 # Prereqs (see tasks/vllm-eval-plan.md for the full recipe):
 #   - ~/vllm-venv with the Volta-compatible pin: vllm 0.6.3.post1 + torch 2.4.0 + transformers 4.45.2
@@ -47,12 +47,27 @@ Environment=CUDA_VISIBLE_DEVICES=1,2,3,4
 # HF_HOME is the dir that contains hub/.
 Environment=HF_HOME=/data/huggingface
 Environment=HF_HUB_OFFLINE=1
+# API key: VLLM_API_KEY=<same value as LLM_API_KEY in the app's .env>. vLLM then
+# requires "Authorization: Bearer <key>" on /v1/* (other paths such as /health,
+# /metrics and /tokenize stay open, so keep the private bind and firewall too).
+# Read from a root-only file rather than --api-key so it isn't visible in ps.
+# Create it once, outside the repo:
+#   sudo install -m 600 -o root -g root /dev/null /etc/vllm-qwen.env
+#   sudoedit /etc/vllm-qwen.env
+EnvironmentFile=/etc/vllm-qwen.env
 
 # The model server. --served-model-name must match the app's LLM_MODEL.
 # --dtype float16 (NOT bfloat16 - Volta has no native bf16).
+# --host is the DGX's private-network address (check: ip -4 addr | grep 192.168.100),
+# never 0.0.0.0: the DGX also has a public IP, and /health, /metrics, /tokenize
+# don't check the API key. Nothing on the DGX may use localhost:8000.
+# Wait for that address first: binding it before the interface is up fails fast,
+# and 3 quick failures hit StartLimitBurst and leave vLLM stopped (as on
+# 2026-10-21). network-online.target doesn't guarantee the address.
+ExecStartPre=/bin/sh -c 'until ip -4 -o addr show | grep -q " 192.168.100.2/"; do sleep 2; done'
 ExecStart=/home/cato-user/vllm-venv/bin/vllm serve Qwen/Qwen2.5-32B-Instruct \
     --served-model-name qwen2.5-32b \
-    --host 0.0.0.0 \
+    --host 192.168.100.2 \
     --port 8000 \
     --tensor-parallel-size 4 \
     --dtype float16

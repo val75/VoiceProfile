@@ -5,7 +5,8 @@
 # prunes old local dumps, and copies the new dump off-box to the DGX over the
 # private network. Invoked by voiceprofile-backup.timer.
 #
-# Reads DATABASE_URL from the app's .env. Runs as a user that can read .env and
+# Reads DATABASE_URL (and optional HEALTHCHECK_URL, for alerts) from the app's
+# .env. Runs as a user that can read .env and
 # has SSH key access to the DGX. Requires postgresql-client (pg_dump) on the box.
 #
 # See docs/deployment/production-deployment.md (Section 5) for setup + restore.
@@ -28,13 +29,41 @@ DGX_USER="${DGX_USER:-cato-user}"
 DGX_DIR="${DGX_DIR:-/data/backups/voiceprofile}"
 SSH_KEY="${SSH_KEY:-/home/cato-user/.ssh/voiceprofile_backup}"
 
-# --- Read DATABASE_URL from .env -------------------------------------------
-if [[ -f "$APP_DIR/.env" ]]; then
-  DATABASE_URL="$(grep -E '^DATABASE_URL=' "$APP_DIR/.env" | head -1 | cut -d= -f2-)"
-  DATABASE_URL="${DATABASE_URL%\"}"; DATABASE_URL="${DATABASE_URL#\"}"
-  DATABASE_URL="${DATABASE_URL%\'}"; DATABASE_URL="${DATABASE_URL#\'}"
+# --- Read settings from .env -----------------------------------------------
+# Prints KEY's value from the app's .env, unquoted; empty if absent.
+env_value() {
+  [[ -f "$APP_DIR/.env" ]] || return 0
+  local v
+  v="$(grep -E "^$1=" "$APP_DIR/.env" | head -1 | cut -d= -f2- || true)"
+  v="${v%\"}"; v="${v#\"}"; v="${v%\'}"; v="${v#\'}"
+  printf '%s' "$v"
+}
+
+# --- healthchecks.io dead-man's switch (optional) --------------------------
+# Every run reports its exit status (0 = OK) to HEALTHCHECK_URL; healthchecks.io
+# emails when a run fails OR when no report arrives in time (timer dead, box
+# down). Unset = no reporting. Kept in .env rather than the unit, which any user
+# can read via `systemctl show`: whoever has the URL can fake "OK" pings.
+HEALTHCHECK_URL="${HEALTHCHECK_URL:-$(env_value HEALTHCHECK_URL)}"
+HEALTHCHECK_URL="${HEALTHCHECK_URL%/}"
+report_status() {
+  local rc=$?
+  if [[ -n "$HEALTHCHECK_URL" ]]; then
+    # A failed ping doesn't fail the backup: the missing ping alerts anyway.
+    curl -fsS -m 10 --retry 3 -o /dev/null "$HEALTHCHECK_URL/$rc" \
+      || echo "[backup] WARNING: healthcheck ping failed" >&2
+  fi
+  exit "$rc"
+}
+trap report_status EXIT
+
+DATABASE_URL="$(env_value DATABASE_URL)"
+# An explicit exit, not ${VAR:?}: that abort can reach the EXIT trap as status 0
+# (bash 3.2), which would report a broken backup as OK.
+if [[ -z "$DATABASE_URL" ]]; then
+  echo "[backup] DATABASE_URL not found in $APP_DIR/.env" >&2
+  exit 1
 fi
-: "${DATABASE_URL:?DATABASE_URL not found in $APP_DIR/.env}"
 
 # pg_dump doesn't understand SQLAlchemy's +driver suffix; strip it.
 PG_URL="${DATABASE_URL/+psycopg2:/:}"

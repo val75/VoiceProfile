@@ -358,7 +358,7 @@ def voice_transcribe(profile_id, step):
     try:
         transcript = transcribe_audio(audio)
     except SpeechToTextError as e:
-        record_result(take_id, error=str(e))
+        record_result(take_id, error=e.detail)
         return jsonify({"error": str(e)}), 502
 
     record_result(take_id, transcript=transcript)

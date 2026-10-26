@@ -5,7 +5,7 @@ import re
 import logging
 from datetime import datetime, timezone
 
-from openai import OpenAI, APITimeoutError, APIConnectionError
+from openai import OpenAI, APITimeoutError, APIConnectionError, AuthenticationError
 from flask import current_app
 
 logger = logging.getLogger(__name__)
@@ -147,7 +147,7 @@ def extract_profile_data(transcripts: dict, model: str = None, base_url: str = N
     config = current_app.config
     client = OpenAI(
         base_url=base_url or config["LLM_URL"],
-        api_key="ollama",
+        api_key=config["LLM_API_KEY"],
     )
     model = model or config["LLM_MODEL"]
     timeout = config["LLM_TIMEOUT"]
@@ -177,6 +177,11 @@ def extract_profile_data(transcripts: dict, model: str = None, base_url: str = N
 
             return result
 
+        except AuthenticationError as e:
+            # Not transient: retrying can't help.
+            logger.error("LLM rejected the API key; check LLM_API_KEY matches the "
+                         "server's (vLLM: VLLM_API_KEY): %s", e)
+            raise ExtractionError("LLM rejected the API key") from e
         except (APITimeoutError, APIConnectionError) as e:
             last_error = e
             logger.warning("LLM request failed (attempt %d): %s", attempt + 1, e)

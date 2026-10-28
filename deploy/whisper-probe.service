@@ -1,0 +1,23 @@
+# systemd oneshot that checks Whisper transcribes for the app. Triggered by the timer.
+#
+#   sudo cp deploy/whisper-probe.service /etc/systemd/system/
+#   sudo cp deploy/whisper-probe.timer   /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now whisper-probe.timer
+#
+# Test it immediately with: sudo systemctl start whisper-probe.service
+# See docs/deployment/production-deployment.md (Whisper uptime check).
+
+[Unit]
+Description=VoiceProfile Whisper uptime probe
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=cato-user
+Group=cato-user
+WorkingDirectory=/home/cato-user/VoiceProfile
+ExecStart=/home/cato-user/VoiceProfile/deploy/whisper_probe.sh
+# Reads WHISPER_URL, WHISPER_API_KEY and WHISPER_HEALTHCHECK_URL from the app's
+# .env (not here: unit environments are readable by any user). See whisper_probe.sh.

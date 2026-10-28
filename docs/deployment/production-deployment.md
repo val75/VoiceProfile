@@ -928,7 +928,7 @@ systemctl list-timers vllm-probe.timer
 
 Rollback (DGX): put back `~/vllm-qwen.service.pre-guard`, then `daemon-reload`.
 
-### Whisper uptime check (2026-10-28)
+### Whisper uptime check (2026-10-28) ✅ (rolled out 2026-10-28)
 
 `deploy/whisper_probe.sh` is the vLLM probe's twin for Whisper, every 5 minutes on
 the app server (`whisper-probe.timer`). Whisper has no health endpoint, so the
@@ -1000,7 +1000,7 @@ whisper-probe.timer` (or `vllm-probe.timer`).
   and R4 (export file permissions) first.
 - [x] **DGX hardening rollout** — done 2026-10-27 (runbook under "DGX exposure incident").
 - [x] **vLLM bind guard + uptime check** — done 2026-10-28; probe green.
-- [ ] **Whisper uptime check** — rollout under "Whisper uptime check".
+- [x] **Whisper uptime check** — done 2026-10-28; probe green.
 - [ ] **Same exposure check on the lab box and the app server**:
   `sudo ss -ltnp` (anything on `0.0.0.0` / `*` besides SSH?) and `sudo ufw status`.
 - [x] **Backup failure alert** — done; healthchecks.io check live, alert email

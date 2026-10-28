@@ -8,9 +8,12 @@
 #   # edit the <PLACEHOLDERS> below (GPU pin especially) to match the box, then:
 #   sudo systemctl daemon-reload
 #   sudo systemctl enable --now vllm-qwen
-#   journalctl -u vllm-qwen -f    # watch startup; ready at "Uvicorn running on http://192.168.100.2:8000"
+#   journalctl -u vllm-qwen -f    # watch startup; ready at "Uvicorn running on socket ('192.168.100.2', 8000)"
+#   ss -ltnp | grep ':8000'       # must show 192.168.100.2:8000, never 0.0.0.0:8000
 #
 # Prereqs (see tasks/vllm-eval-plan.md for the full recipe):
+#   - deploy/patch-vllm-bind.sh applied to ~/vllm-venv (build-vllm-venv.sh does it):
+#     vllm 0.6.3.post1 otherwise ignores --host; this unit refuses to start without it
 #   - ~/vllm-venv with the Volta-compatible pin: vllm 0.6.3.post1 + torch 2.4.0 + transformers 4.45.2
 #   - a REAL pyairports installed (mirror-bypass), or vLLM 500s on every request (it imports
 #     outlines->pyairports unconditionally, even though we run json_mode off and never constrain)
@@ -61,6 +64,11 @@ EnvironmentFile=/etc/vllm-qwen.env
 # --host is the DGX's private-network address (check: ip -4 addr | grep 192.168.100),
 # never 0.0.0.0: the DGX also has a public IP, and /health, /metrics, /tokenize
 # don't check the API key. Nothing on the DGX may use localhost:8000.
+# vllm 0.6.3.post1 ignores --host (it binds every interface) unless the venv is
+# patched with deploy/patch-vllm-bind.sh. Refuse to start without the patch, so a
+# reinstall can't silently put vLLM back on the public IP. (Uses the repo clone
+# at ~/VoiceProfile, which Whisper runs from too.)
+ExecStartPre=/usr/bin/env VENV=/home/cato-user/vllm-venv /bin/bash /home/cato-user/VoiceProfile/deploy/patch-vllm-bind.sh --check
 # Wait for that address first: binding it before the interface is up fails fast,
 # and 3 quick failures hit StartLimitBurst and leave vLLM stopped (as on
 # 2026-10-21). network-online.target doesn't guarantee the address.

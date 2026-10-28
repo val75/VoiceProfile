@@ -870,7 +870,7 @@ ss -ltnp | grep ':8000'          # 192.168.100.2:8000, never 0.0.0.0:8000
 Rollback: put back the saved `*.pre-hardening` unit, then `daemon-reload` and restart.
 If Ollama is ever re-enabled on the DGX, set `OLLAMA_HOST=127.0.0.1:11434`.
 
-### vLLM bind guard + uptime check (2026-10-27)
+### vLLM bind guard + uptime check (2026-10-27) ✅ (rolled out 2026-10-28)
 
 **vLLM 0.6.3.post1 ignores `--host`.** The rollout above showed vLLM on
 `0.0.0.0:8000` although its args said `host='192.168.100.2'`. In 0.6.3.post1,
@@ -928,6 +928,46 @@ systemctl list-timers vllm-probe.timer
 
 Rollback (DGX): put back `~/vllm-qwen.service.pre-guard`, then `daemon-reload`.
 
+### Whisper uptime check (2026-10-28)
+
+`deploy/whisper_probe.sh` is the vLLM probe's twin for Whisper, every 5 minutes on
+the app server (`whisper-probe.timer`). Whisper has no health endpoint, so the
+probe sends a generated silent clip to `WHISPER_URL` the way the app sends audio
+(the app's `WHISPER_API_KEY`, a `file` form field, the app's 90 s timeout) and
+expects a transcript back. A real clip, not an empty request, so the model and the
+temp files are exercised too. The clip is about 1.1 MB, just over the 1 MiB that
+Starlette keeps in memory, so it is written to `/tmp` like a big recording. A
+disk too full for that, as on 2026-10-25, counts as down. A disk with a few MB
+left still passes, so this is no substitute for watching DGX disk space. Whisper
+works in 30 s windows, so a run costs about the same GPU time as a 1 s clip.
+Whisper handles one request at a time, so a probe can queue behind a worker's
+recording; a timeout is logged as "no response" (hung model or GPU), not "cannot
+reach" (network). Same reporting as the vLLM probe: success
+pings when healthy; when not, a "log" ping with the reason, including Whisper's
+own error text (e.g. `HTTP 500: ... No space left on device`), with no status change.
+Period 6 min, Grace 9 min: the email comes 15 minutes after the last good probe.
+
+#### Rollout (app server)
+
+```bash
+# 1. healthchecks.io: add a check "whisper", Period 6 minutes, Grace 9 minutes,
+#    notify by email. App server .env: WHISPER_HEALTHCHECK_URL=https://hc-ping.com/<uuid>
+
+# 2. Install the probe
+cd /home/cato-user/VoiceProfile && git pull
+sudo cp deploy/whisper-probe.service deploy/whisper-probe.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl start whisper-probe.service
+journalctl -u whisper-probe.service -n 5 --no-pager  # "[whisper-probe] OK: transcribed a test clip at ..."
+#    the check turns green in the dashboard
+sudo systemctl enable --now whisper-probe.timer
+systemctl list-timers whisper-probe.timer
+```
+
+To turn a probe off (Whisper or vLLM): pause its check in healthchecks.io first,
+so the missing pings don't email, then `sudo systemctl disable --now
+whisper-probe.timer` (or `vllm-probe.timer`).
+
 ---
 
 ## Open items
@@ -959,7 +999,8 @@ Rollback (DGX): put back `~/vllm-qwen.service.pre-guard`, then `daemon-reload`.
 - [ ] **Raw voice recordings follow-ups R1–R9** — minor; R1 (decision on the wrong take)
   and R4 (export file permissions) first.
 - [x] **DGX hardening rollout** — done 2026-10-27 (runbook under "DGX exposure incident").
-- [ ] **vLLM bind guard + uptime check** — rollout under "vLLM bind guard + uptime check".
+- [x] **vLLM bind guard + uptime check** — done 2026-10-28; probe green.
+- [ ] **Whisper uptime check** — rollout under "Whisper uptime check".
 - [ ] **Same exposure check on the lab box and the app server**:
   `sudo ss -ltnp` (anything on `0.0.0.0` / `*` besides SSH?) and `sudo ufw status`.
 - [x] **Backup failure alert** — done; healthchecks.io check live, alert email
@@ -970,6 +1011,8 @@ Rollback (DGX): put back `~/vllm-qwen.service.pre-guard`, then `daemon-reload`.
   restarted, and what held `:8000`. Candidate: vLLM 0.6.3 binds without
   `SO_REUSEADDR`, so leftover TIME_WAIT connections block a quick rebind.
 - [ ] **DGX `/` headroom** — `/` is a 98 GB LV; check `sudo vgs` for free space to grow it.
+  No disk-space alert yet: the Whisper probe only fails once `/` can't take a
+  1 MB write.
 
 ### Resolved during setup
 

@@ -46,6 +46,10 @@ python3 -m venv "$VENV"
 # Repair pyairports (PyPI 0.0.1 stub -> real GitHub package) + setuptools<81.
 VENV="$VENV" bash "$SCRIPT_DIR/fix-pyairports.sh"
 
+# vllm 0.6.3.post1 ignores --host and binds every interface; apply 0.6.4's fix.
+# vllm-qwen.service refuses to start without it.
+VENV="$VENV" bash "$SCRIPT_DIR/patch-vllm-bind.sh"
+
 # --- Verify the Volta gate + the deps that bit us, fail loudly if regressed ---
 "$VENV/bin/python" - <<'PY'
 import torch, transformers, vllm

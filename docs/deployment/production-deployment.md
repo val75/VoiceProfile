@@ -31,6 +31,7 @@ Two bare-metal Ubuntu servers:
   (see "DGX exposure incident" in the change log):
   - **Firewall.** ufw denies all incoming traffic except SSH and `192.168.100.0/24`.
   - **Private bind.** Both services listen on `192.168.100.2` only, never `0.0.0.0`.
+    vLLM 0.6.3 needs `deploy/patch-vllm-bind.sh` for this (see "vLLM bind guard").
   - **API keys.** Whisper checks `X-API-Key`; vLLM checks `Authorization: Bearer` on `/v1/*`.
 
 Public traffic reaches the app entirely through a **Cloudflare Tunnel**
@@ -770,7 +771,7 @@ query selects only those columns).
 
 Rollout per host: pull, restart. No migration, no new env keys or dependencies.
 
-### DGX exposure incident + service hardening (2026-10-25) — rollout pending
+### DGX exposure incident + service hardening (2026-10-25) ✅ (rolled out 2026-10-27)
 
 **What happened.** Prod onboarding showed "Couldn't turn that into text" on every
 recording. Whisper was returning a bare 500 because the DGX's `/` was full, and it
@@ -818,7 +819,8 @@ tries, and extraction failed for every worker until the 25th.
   `/v1/*`; `/health`, `/metrics` and `/tokenize` stay open, which is why the
   private bind matters.
 - **Both units bind `192.168.100.2`**, not `0.0.0.0`. Nothing on the DGX calls them
-  via localhost (checked).
+  via localhost (checked). The rollout found that vLLM 0.6.3 ignores `--host`;
+  see "vLLM bind guard" below.
 - **Backup alerts.** `deploy/backup_db.sh` reports every run's exit status to
   healthchecks.io when `HEALTHCHECK_URL` is set in `.env` (Section 5, step 5).
   Without it, behaviour is unchanged.
@@ -854,9 +856,11 @@ diff <(tail -n +2 ~/vllm-qwen.service.pre-hardening) ~/VoiceProfile/deploy/vllm-
 #    (CUDA_VISIBLE_DEVICES, HF_HOME) before installing
 sudo install -m 600 -o root -g root /dev/null /etc/vllm-qwen.env
 sudoedit /etc/vllm-qwen.env      # VLLM_API_KEY=<same value as the app's LLM_API_KEY>
+bash ~/VoiceProfile/deploy/patch-vllm-bind.sh                    # else --host is ignored
 sudo cp ~/VoiceProfile/deploy/vllm-qwen.service /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl restart vllm-qwen
-journalctl -u vllm-qwen -f       # "Uvicorn running on http://192.168.100.2:8000"
+journalctl -u vllm-qwen -f       # "Uvicorn running on socket ('192.168.100.2', 8000)"
+ss -ltnp | grep ':8000'          # 192.168.100.2:8000, never 0.0.0.0:8000
 #    from the app server: curl http://192.168.100.2:8000/v1/models -> 401;
 #    with -H "Authorization: Bearer <key>" -> 200; then finish an onboarding
 
@@ -865,6 +869,64 @@ journalctl -u vllm-qwen -f       # "Uvicorn running on http://192.168.100.2:8000
 
 Rollback: put back the saved `*.pre-hardening` unit, then `daemon-reload` and restart.
 If Ollama is ever re-enabled on the DGX, set `OLLAMA_HOST=127.0.0.1:11434`.
+
+### vLLM bind guard + uptime check (2026-10-27)
+
+**vLLM 0.6.3.post1 ignores `--host`.** The rollout above showed vLLM on
+`0.0.0.0:8000` although its args said `host='192.168.100.2'`. In 0.6.3.post1,
+`run_server()` opens the port itself with `sock.bind(("", args.port))`, i.e. every
+interface, and hands the socket to uvicorn, so `--host` never takes effect (and
+the log reads "running on socket (...)"). vLLM 0.6.4 fixed it; we can't upgrade
+(Volta pin). ufw and the key still covered the gap.
+- **`deploy/patch-vllm-bind.sh`** applies 0.6.4's one-line fix,
+  `sock.bind((args.host or "", args.port))`, to `~/vllm-venv`. Re-running it is
+  harmless. `build-vllm-venv.sh` runs it, so a rebuild stays patched.
+- **`deploy/vllm-qwen.service` refuses to start** without the fix: an
+  `ExecStartPre` runs `patch-vllm-bind.sh --check` (from the `~/VoiceProfile`
+  clone), so a reinstall fails loudly instead of quietly listening on the public
+  IP again. The journal then says to run the patch script.
+- The DGX venv was patched by hand on 2026-10-27, so the script finds it already done.
+- 0.6.4 also sets `SO_REUSEADDR` on that socket, and 0.6.3 doesn't. That may explain
+  the 2026-10-21 "Address already in use" (unverified; not patched).
+
+**vLLM uptime check.** `deploy/vllm_probe.sh` runs every 5 minutes on the app
+server (`vllm-probe.timer`). It lists models at `LLM_URL` with the app's
+`LLM_API_KEY` and checks `LLM_MODEL` is served: the same path, key and model the
+app's extraction needs. Healthy runs send a healthchecks.io success ping. Failed
+runs send a "log" ping with the reason, which shows in the check's Events but
+doesn't change its status. With Period 6 min and Grace 9 min (the Period is a
+minute longer than the timer, so a slightly late healthy probe doesn't count as
+late), the check turns amber 6 minutes after the last good probe and red, with
+the email, after 15. A planned restart stays quiet if vLLM is serving again
+within about 10 minutes (the 2026-10-27 restart took about 80 s); a longer one alerts.
+
+#### Rollout
+
+```bash
+# 1. DGX: install the guarded unit (vLLM keeps running; it applies on the next start)
+cd ~/VoiceProfile && git pull
+bash deploy/patch-vllm-bind.sh --check           # expect "OK: ... binds --host"
+systemctl cat vllm-qwen > ~/vllm-qwen.service.pre-guard           # rollback copy
+diff <(tail -n +2 ~/vllm-qwen.service.pre-guard) deploy/vllm-qwen.service
+#    expect only the guard (ExecStartPre ... --check) and comment changes; carry
+#    over any box-specific values (CUDA_VISIBLE_DEVICES, HF_HOME) before installing
+sudo cp deploy/vllm-qwen.service /etc/systemd/system/ && sudo systemctl daemon-reload
+
+# 2. healthchecks.io: add a check "vllm", Period 6 minutes, Grace 9 minutes,
+#    notify by email. App server .env: VLLM_HEALTHCHECK_URL=https://hc-ping.com/<uuid>
+
+# 3. App server: install the probe
+cd /home/cato-user/VoiceProfile && git pull
+sudo cp deploy/vllm-probe.service deploy/vllm-probe.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl start vllm-probe.service
+journalctl -u vllm-probe.service -n 5 --no-pager # "[vllm-probe] OK: qwen2.5-32b at ..."
+#    the check turns green in the dashboard
+sudo systemctl enable --now vllm-probe.timer
+systemctl list-timers vllm-probe.timer
+```
+
+Rollback (DGX): put back `~/vllm-qwen.service.pre-guard`, then `daemon-reload`.
 
 ---
 
@@ -896,15 +958,17 @@ If Ollama is ever re-enabled on the DGX, set `OLLAMA_HOST=127.0.0.1:11434`.
   Follow-up C.
 - [ ] **Raw voice recordings follow-ups R1–R9** — minor; R1 (decision on the wrong take)
   and R4 (export file permissions) first.
-- [ ] **DGX hardening rollout** — the runbook under "DGX exposure incident".
+- [x] **DGX hardening rollout** — done 2026-10-27 (runbook under "DGX exposure incident").
+- [ ] **vLLM bind guard + uptime check** — rollout under "vLLM bind guard + uptime check".
 - [ ] **Same exposure check on the lab box and the app server**:
   `sudo ss -ltnp` (anything on `0.0.0.0` / `*` besides SSH?) and `sudo ufw status`.
-- [ ] **Backup failure alert** — code done (healthchecks.io); create the check and
-  set `HEALTHCHECK_URL` (Section 5, step 5).
+- [x] **Backup failure alert** — done; healthchecks.io check live, alert email
+  verified 2026-10-27 (Section 5, step 5).
 - [ ] **Hourly `ssh-rsa` rejects on the DGX** at :30:13 (`ssh-rsa not in
   PubkeyAcceptedAlgorithms`) — find the source.
 - [ ] **The 2026-10-21 restart** — why Whisper, containerd, Ollama and vLLM all
-  restarted, and what held `:8000`.
+  restarted, and what held `:8000`. Candidate: vLLM 0.6.3 binds without
+  `SO_REUSEADDR`, so leftover TIME_WAIT connections block a quick rebind.
 - [ ] **DGX `/` headroom** — `/` is a 98 GB LV; check `sudo vgs` for free space to grow it.
 
 ### Resolved during setup

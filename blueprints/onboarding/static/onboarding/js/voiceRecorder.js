@@ -8,6 +8,9 @@
  *    ▲                                            │                 │
  *    └──────────────── Record again ──────────────┘   error ◀───────┘
  *                                                  (back to recorded)
+ *
+ * A take the server refuses (4xx, e.g. no name heard) goes back to idle
+ * with the server's message instead: sending it again can't help.
  */
 
 (function(window) {
@@ -285,6 +288,16 @@
 
         // Error bodies are JSON ({"error": ...}) for 4xx/502; anything else is a server fault.
         const data = await response.json().catch(() => ({}));
+
+        // A 4xx says what was wrong with this take (e.g. "Please say just your name."),
+        // so sending it again can't help: show the message and go back to Record.
+        if (response.status >= 400 && response.status < 500 && data.error) {
+          this.reset();
+          this.updateStatus(data.error, 'error');
+          return;
+        }
+
+        // A 502's text is technical, so the catch below shows the friendly message.
         if (!response.ok || data.error) {
           throw new Error(data.error || `Server error: ${response.status}`);
         }

@@ -784,6 +784,10 @@ caller in the app; prod access log showed no hits in 30 days):
 - **Confirm screen errors:** a refused confirm (empty or too-long edit, no pending name) now
   shows the server's message by the buttons and re-enables them; it used to say "Saved!"
   and leave the buttons disabled.
+- **Recorder errors:** a take the server refuses (4xx, e.g. "Please say just your name.") shows
+  that message and goes back to Record; before, every failure said "Couldn't turn that into
+  text. Tap Transcribe to try again." and resending the same take failed again. Whisper
+  failures (502) and unreadable replies keep that generic message and the take.
 
 Known gaps, left by decision (none is a regression from before this change):
 
@@ -818,8 +822,9 @@ older than the hour are pruned table-wide on each call), checked
 before the body is read so every call counts; then a per-request body cap
 `TRANSCRIBE_MAX_BYTES` (default 10 MB, whole request → 413), so Werkzeug stops reading an
 oversized upload instead of spooling it. The cap is scoped to this route; onboarding uploads
-are unaffected. The review page now shows the server's error message instead of a bare status
-code, and treats a non-JSON reply (e.g. a proxy page) as a failure, keeping the take.
+are unaffected. The review page now shows the server's message for a 4xx (429, 413) instead of
+a bare status code; a 5xx (whose text is technical) and a non-JSON reply (e.g. a proxy page)
+still show "Upload failed: Server error: <status>", keeping the take.
 
 **Before rollout, check prod for planted rows.** The strongest evidence is the access log, over
 everything journald still holds (no `--since`); no output means no call to the removed

@@ -4,7 +4,12 @@ from flask import current_app
 
 
 class SpeechToTextError(Exception):
-    pass
+    """str(e) is safe to show the worker; .detail is Whisper's reason, for
+    the admin-only recordings page (defaults to the message)."""
+
+    def __init__(self, message, detail=None):
+        super().__init__(message)
+        self.detail = detail or message
 
 
 def transcribe_audio(file_storage):
@@ -46,12 +51,24 @@ def transcribe_audio(file_storage):
             timeout=90,
         )
     except requests.RequestException as e:
+        current_app.logger.error("Whisper unreachable at %s: %s", whisper_url, e)
         raise SpeechToTextError("Whisper service unreachable") from e
 
     if response.status_code != 200:
-        raise SpeechToTextError(response.text)
+        # The cause goes to the log; str(e) reaches the browser, so keep it generic.
+        current_app.logger.error(
+            "Whisper returned HTTP %s: %r",
+            response.status_code, response.text[:1000],
+        )
+        raise SpeechToTextError(
+            f"Whisper error (HTTP {response.status_code})",
+            detail=f"HTTP {response.status_code}: {response.text[:1000]}",
+        )
 
-    data = response.json()
+    try:
+        data = response.json()
+    except ValueError:
+        data = None
     if not isinstance(data, dict) or data.get("text") is None:
         current_app.logger.error(
             "Whisper returned an unexpected payload (HTTP %s): %r",

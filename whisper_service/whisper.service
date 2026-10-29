@@ -1,8 +1,7 @@
 # systemd unit for the Whisper transcription API. Runs on the DGX.
 #
-# Install:
+# Install (from the checkout at ~/VoiceProfile):
 #   sudo cp whisper_service/whisper.service /etc/systemd/system/whisper.service
-#   # edit the <PLACEHOLDERS> below to match the DGX, then:
 #   sudo systemctl daemon-reload
 #   sudo systemctl enable --now whisper
 #
@@ -20,10 +19,22 @@ User=cato-user
 # The whisper_service dir inside the repo checkout, so uvicorn imports app:app.
 WorkingDirectory=/home/cato-user/VoiceProfile/whisper_service
 
-# Absolute path to uvicorn inside the venv where the deps are installed.
-# Consider binding to the DGX private IP instead of 0.0.0.0 so the service
-# isn't reachable from any public interface (e.g. --host 192.168.100.2).
-ExecStart=/home/cato-user/VoiceProfile/whisper_service/venv/bin/uvicorn app:app --host 0.0.0.0 --port 6000
+# WHISPER_API_KEY=<same value as WHISPER_API_KEY in the app's .env>
+# The service refuses to start without it. Create it once, outside the repo:
+#   sudo install -m 600 -o root -g root /dev/null /etc/whisper.env
+#   sudoedit /etc/whisper.env
+EnvironmentFile=/etc/whisper.env
+
+# uvicorn from the venv, which lives OUTSIDE the checkout at ~/whisper_service/venv
+# (where the first install built it; a venv can't be moved, and rebuilding means
+# re-downloading the CUDA torch wheels).
+# --host is the DGX's private-network address (check: ip -4 addr | grep 192.168.100),
+# never 0.0.0.0: the DGX also has a public IP. Only the app server calls this,
+# so nothing on the DGX itself can use localhost:6000.
+# Wait for that address first: binding it before the interface is up fails, and
+# network-online.target doesn't guarantee it. (Bounded by TimeoutStartSec.)
+ExecStartPre=/bin/sh -c 'until ip -4 -o addr show | grep -q " 192.168.100.2/"; do sleep 2; done'
+ExecStart=/home/cato-user/whisper_service/venv/bin/uvicorn app:app --host 192.168.100.2 --port 6000
 
 Restart=on-failure
 RestartSec=5

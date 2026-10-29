@@ -28,3 +28,5 @@ Environment=DGX_HOST=<DGX_HOSTNAME_OR_IP>
 Environment=DGX_USER=cato-user
 Environment=DGX_DIR=/data/backups/voiceprofile
 Environment=SSH_KEY=/home/cato-user/.ssh/voiceprofile_backup
+# Failure alerts: put HEALTHCHECK_URL=https://hc-ping.com/<uuid> in the app's .env
+# (not here: unit environments are readable by any user). See backup_db.sh.

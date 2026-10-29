@@ -16,7 +16,9 @@ fidelity rather than a reimplementation.
 The LLM endpoint defaults to the running box's own `LLM_URL` (from its .env) —
 which is correct per environment: the lab laptop's points at the T4, the prod
 app server's at the DGX-2 over the VLAN. Pass `--base-url` only to override it
-(e.g. `http://localhost:11434/v1` when running the sweep directly on the DGX-2).
+(e.g. `http://192.168.100.2:8000/v1` for prod vLLM, which listens only on the
+private IP — not localhost — and requires a key: run with
+`LLM_API_KEY=<the DGX's VLLM_API_KEY>` set, which beats the box's .env).
 `--env` is just a label for the report file/header. The runner runs inside a
 Flask app context so extract_profile_data sees config.
 """
@@ -167,7 +169,8 @@ def main(argv=None):
                              "does not select the endpoint.")
     parser.add_argument("--base-url", default=None,
                         help="Override the LLM endpoint. Default: this box's own LLM_URL "
-                             "(.env). Use e.g. http://localhost:11434/v1 when running on the DGX-2.")
+                             "(.env). Prod vLLM: http://192.168.100.2:8000/v1 (not localhost), "
+                             "with LLM_API_KEY set in the environment.")
     parser.add_argument("--models", required=True,
                         help="Comma-separated Ollama model tags to evaluate.")
     parser.add_argument("--cases", default="scripts/eval_data/golden_set.json",

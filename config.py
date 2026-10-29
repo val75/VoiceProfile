@@ -45,6 +45,8 @@ class Config:
     WHISPER_API_KEY = os.getenv("WHISPER_API_KEY")
     LLM_URL = os.getenv("LLM_URL", "http://localhost:11434/v1")
     LLM_MODEL = os.getenv("LLM_MODEL", "mistral:7b-instruct")
+    # vLLM on the DGX requires this (its VLLM_API_KEY); Ollama ignores it.
+    LLM_API_KEY = os.getenv("LLM_API_KEY", "ollama")
     LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", "30"))
     # Hard cap on extraction output, as a secondary guard against a runaway/
     # repetition loop (LLM_TIMEOUT is the primary one). A normal profile's JSON is

@@ -47,6 +47,18 @@ def test_stt_failure_keeps_take_with_error(app, client, worker):
     assert t.stt_error == "boom" and t.transcript is None and t.status == "failed"
 
 
+def test_stt_failure_stores_whisper_detail_but_shows_generic_message(app, client, worker):
+    # The admin recordings page needs Whisper's reason; the browser must not get it.
+    app.config["VOICE_RECORDING_CAPTURE"] = True
+    err = SpeechToTextError("Whisper error (HTTP 500)",
+                            detail="transcription failed: OSError: No space left on device")
+    with patch(WHISPER, side_effect=err):
+        resp = _post(client, worker.id)
+    assert resp.get_json() == {"error": "Whisper error (HTTP 500)"}
+    t = VoiceRecording.query.one()
+    assert t.stt_error == "transcription failed: OSError: No space left on device"
+
+
 def test_capture_error_leaves_worker_flow_identical(app, client, worker):
     app.config["VOICE_RECORDING_CAPTURE"] = True
     with patch(WHISPER, side_effect=_echo), \

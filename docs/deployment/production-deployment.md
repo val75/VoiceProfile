@@ -817,7 +817,10 @@ caller in the app; prod access log showed no hits in 30 days):
 - **Recorder errors:** a take the server refuses (4xx, e.g. "Please say just your name.") shows
   that message and goes back to Record; before, every failure said "Couldn't turn that into
   text. Tap Transcribe to try again." and resending the same take failed again. Whisper
-  failures (502) and unreadable replies keep that generic message and the take.
+  failures (502) and replies that aren't JSON keep that generic message and the take. That
+  includes a lost session: the request is redirected to the login page (a 200), which the
+  recorder used to treat as a transcription, discarding the take and showing "Transcription
+  complete". Logging in again from that screen is still up to the worker (no prompt).
 
 Known gaps, left by decision (none is a regression from before this change):
 
@@ -858,7 +861,8 @@ still show "Upload failed: Server error: <status>", keeping the take.
 
 **Before rollout, check prod for planted rows.** The strongest evidence is the access log, over
 everything journald still holds (no `--since`); no output means no call to the removed
-`POST /profiles/` was logged (a 30-day check on 2026-10-21 found none):
+`POST /profiles/` was logged. This came back clean on lab and prod on 2026-10-21. The route stays
+live until this rollout, so repeat it just before rolling out, to cover the time since:
 
 ```bash
 journalctl -u voiceprofile | grep -E '"POST /profiles/? HTTP'
@@ -1114,8 +1118,9 @@ whisper-probe.timer` (or `vllm-probe.timer`).
   Follow-up C.
 - [ ] **Raw voice recordings follow-ups R1–R9** — minor; R1 (decision on the wrong take)
   and R4 (export file permissions) first.
-- [ ] **Planted/orphaned profile check** — full-retention access-log grep, then the read-only
-  query, under "Unfinished profiles + unauthenticated endpoints", on prod before that rollout.
+- [ ] **Planted/orphaned profile check** — read-only query still to run on prod before that
+  rollout; access-log grep clean on lab and prod 2026-10-21, repeat it just before rollout (both
+  under "Unfinished profiles + unauthenticated endpoints").
 - [x] **DGX hardening rollout** — done 2026-10-27 (runbook under "DGX exposure incident").
 - [x] **vLLM bind guard + uptime check** — done 2026-10-28; probe green.
 - [x] **Whisper uptime check** — done 2026-10-28; probe green.

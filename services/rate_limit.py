@@ -1,4 +1,5 @@
-"""Rate limiting for OTP sends — guards against SMS-bombing and cost abuse."""
+"""Rate limiting for OTP sends (SMS-bombing, cost abuse) and for the public
+transcribe endpoint (Whisper cost abuse)."""
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -6,6 +7,7 @@ from flask import current_app
 
 from extensions.database import db
 from models.otp_request import OTPRequest
+from models.transcribe_request import TranscribeRequest
 
 
 def check_otp_rate_limit(phone: str, ip: Optional[str]) -> Optional[str]:
@@ -56,5 +58,32 @@ def check_otp_rate_limit(phone: str, ip: Optional[str]) -> Optional[str]:
 
     # Allowed — record it.
     db.session.add(OTPRequest(phone=phone, ip=ip, created_at=now))
+    db.session.commit()
+    return None
+
+
+def check_transcribe_rate_limit(ip: Optional[str]) -> Optional[str]:
+    """Per-IP hourly cap on /voice/transcribe, backed by the transcribe_requests
+    table so it holds across gunicorn workers. Returns None if allowed (and
+    records the request), or a short user-facing reason string if blocked."""
+    per_ip = current_app.config["TRANSCRIBE_MAX_PER_IP_PER_HOUR"]
+
+    now = datetime.now(timezone.utc)
+    hour_ago = now - timedelta(hours=1)
+
+    # Housekeeping: drop every row older than the window so the table stays bounded.
+    # Unlike a phone, an IP often never comes back to prune its own rows. Cheap on the
+    # created_at index.
+    TranscribeRequest.query.filter(
+        TranscribeRequest.created_at < hour_ago
+    ).delete(synchronize_session=False)
+
+    if TranscribeRequest.query.filter(
+        TranscribeRequest.ip == ip, TranscribeRequest.created_at > hour_ago
+    ).count() >= per_ip:
+        db.session.commit()
+        return "Too many recordings from this network. Please try again later, or type your review."
+
+    db.session.add(TranscribeRequest(ip=ip, created_at=now))
     db.session.commit()
     return None

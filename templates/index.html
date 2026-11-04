@@ -131,8 +131,9 @@
         </p>
 
         {% if session.get('profile_id') %}
+            {# view_profile sends an unfinished profile back to its onboarding step #}
             <a href="{{ url_for('profiles.view_profile', profile_id=session['profile_id']) }}" class="btn btn-primary">
-                Continue to my profile
+                Continue
             </a>
             <form method="POST" action="{{ url_for('auth.logout') }}" style="margin:0">
                 <button type="submit" class="btn btn-secondary">Sign out</button>

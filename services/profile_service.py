@@ -1,6 +1,7 @@
 # app/services/profile_service.py
 """Admin view of worker profiles: counts, search, and whole-profile deletion
-(for worker "delete my data" requests).
+(for worker "delete my data" requests), plus the public-page lookup that hides
+profiles still in onboarding.
 
 The admin list deliberately selects only bookkeeping columns: never
 profile_data, transcripts or review text.
@@ -8,7 +9,7 @@ profile_data, transcripts or review text.
 import re
 from typing import Optional
 
-from flask import current_app
+from flask import abort, current_app
 from sqlalchemy import exists, func, or_, select
 
 from extensions.database import db
@@ -26,6 +27,15 @@ STEP_LABELS = {"intro": "intro", "name": "name", "name_confirm": "name",
 STATUSES = ("completed", "incomplete")
 REVIEW_FILTERS = ("has", "none")
 _PHONE_LIKE = re.compile(r"[\d\s().+\-]+")
+
+
+def completed_profile_or_404(profile_id: int) -> WorkerProfile:
+    """The profile for a public page; 404 until onboarding is completed, so an
+    abandoned sign-up never shows up as an empty profile."""
+    profile = db.session.get(WorkerProfile, profile_id)
+    if profile is None or profile.onboarding_state != COMPLETED:
+        abort(404)
+    return profile
 
 
 def _step_label(state: Optional[str]) -> str:

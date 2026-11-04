@@ -8,6 +8,7 @@ from blueprints.auth.decorators import profile_owner_required
 from services.stt_service import transcribe_audio, SpeechToTextError
 from services.nlp_service import extract_profile_data, ExtractionError
 from services.recording_service import save_take, record_result, mark_decision
+from services.profile_service import COMPLETED
 import re
 import logging
 
@@ -47,6 +48,29 @@ VOICE_STEPS = ["name", "story", "availability"]
 
 # How long (seconds) the worker may speak per voice step. Story is capped at 3 min.
 STEP_MAX_SECONDS = {"story": 180}
+
+# Session key for a name take awaiting the worker's confirmation.
+PENDING_NAME_KEY = "pending_name_transcript"
+
+# Longest name profiles.name holds (also keeps a pending take small in the session cookie).
+NAME_MAX_LENGTH = WorkerProfile.__table__.c.name.type.length
+
+
+def _advance(profile, state):
+    """Record onboarding progress. A completed profile stays completed while it's
+    re-edited (e.g. "Re-record story"): the state gates whether it's public, and the
+    step-to-step flow runs on each response's next_url, not on the stored state."""
+    if profile.onboarding_state != COMPLETED:
+        profile.onboarding_state = state
+
+
+def _set_extracted(profile, data):
+    """Store fresh extraction output. A completed profile is public, so a re-edit's
+    output waits in profile_data_draft until the worker saves the review page."""
+    if profile.onboarding_state == COMPLETED:
+        profile.profile_data_draft = data
+    else:
+        profile.profile_data = data
 
 
 def clean_transcribed_name(transcription: str) -> str:
@@ -89,35 +113,6 @@ def _parse_duration_ms(raw):
         return None
     return value if 0 <= value <= 24 * 3600 * 1000 else None
 
-
-@onboarding_bp.route('/question/<question_id>')
-def show_question(question_id):
-    question_text = QUESTIONS.get(question_id, 'Question not found')
-
-    return render_template(
-        'onboarding/record_question.html',
-        question_id=question_id,
-        question_text=question_text
-    )
-
-
-@onboarding_bp.route("/transcribe", methods=["POST"])
-def transcribe():
-    if "audio" not in request.files:
-        return jsonify({"error": "Missing audio file"}), 400
-
-    audio = request.files["audio"]
-    question_id = request.form.get('question_id', 'unknown')
-
-    try:
-        text = transcribe_audio(audio)
-    except SpeechToTextError as e:
-        return jsonify({"error": str(e)}), 502
-
-    return jsonify({
-        'text': text,
-        'question_id': question_id
-    })
 
 # ---------------------------------------------------------------------------
 # Onboarding flow
@@ -214,8 +209,11 @@ def name_step(profile_id):
 @onboarding_bp.route("/<int:profile_id>/name/transcribe", methods=["POST"])
 @profile_owner_required
 def name_transcribe(profile_id):
-    """Receive the audio, transcribe it, clean the name, and persist it."""
+    """Receive the audio, transcribe it, and hold the name until the worker confirms it."""
     profile = WorkerProfile.query.get_or_404(profile_id)
+
+    # A new take replaces any earlier one, so a failed take can't leave the old one confirmable.
+    session.pop(PENDING_NAME_KEY, None)
 
     if "audio" not in request.files:
         return jsonify({"error": "Missing audio file"}), 400
@@ -228,11 +226,15 @@ def name_transcribe(profile_id):
         return jsonify({"error": str(e)}), 502
 
     cleaned_name = clean_transcribed_name(transcript)
+    if not cleaned_name:
+        return jsonify({"error": "We didn't catch a name. Please try again."}), 400
+    if len(cleaned_name) > NAME_MAX_LENGTH:
+        return jsonify({"error": "Please say just your name."}), 400
 
-    # Persist the cleaned name and raw transcript, then move state forward.
-    profile.name = cleaned_name
-    profile.transcripts = {**(profile.transcripts or {}), "name": transcript}
-    profile.onboarding_state = "name_confirm"
+    # The name is public, so a re-recorded one must not replace it before it's
+    # confirmed: keep the take in the session; confirm_name saves it.
+    session[PENDING_NAME_KEY] = transcript
+    _advance(profile, "name_confirm")
     db.session.commit()
 
     return jsonify({
@@ -272,9 +274,9 @@ def name_transcribe(profile_id):
 @profile_owner_required
 def confirm_name(profile_id):
     """
-        The client sends { confirmed: true/false }
-        - Confirmed  → advance to the skills step
-        - Rejected   → wipe the name and send the user back to re-record
+        The client sends { confirmed: true/false, edited_text? }
+        - Confirmed  → save the pending name (edited text wins) and advance to the story step
+        - Rejected   → drop the pending name (the saved one is untouched) and re-record
     """
 
     profile = WorkerProfile.query.get_or_404(profile_id)
@@ -283,14 +285,22 @@ def confirm_name(profile_id):
     confirmed = data.get("confirmed")
 
     if confirmed:
+        transcript = session.get(PENDING_NAME_KEY)
+        if transcript is None:
+            return jsonify({"error": "Please record your name first."}), 400
+
         edited_text = data.get("edited_text")
         if edited_text is not None:
             edited_text = edited_text.strip()
             if not edited_text:
                 return jsonify({"error": "Name cannot be empty"}), 400
-            profile.name = edited_text
+            if len(edited_text) > NAME_MAX_LENGTH:
+                return jsonify({"error": "That name is too long."}), 400
 
-        profile.onboarding_state = "story"
+        session.pop(PENDING_NAME_KEY)
+        profile.name = edited_text if edited_text is not None else clean_transcribed_name(transcript)
+        profile.transcripts = {**(profile.transcripts or {}), "name": transcript}
+        _advance(profile, "story")
         db.session.commit()
 
         return jsonify({
@@ -298,9 +308,9 @@ def confirm_name(profile_id):
             "next_url": url_for("onboarding.voice_step", profile_id=profile.id, step="story")
         })
     else:
-        # Reset so the user can try again
-        profile.name = None
-        profile.onboarding_state = "name"
+        # Let the user try again; a previously saved name stays as it was.
+        session.pop(PENDING_NAME_KEY, None)
+        _advance(profile, "name")
         db.session.commit()
 
         return jsonify({
@@ -364,7 +374,7 @@ def voice_transcribe(profile_id, step):
     record_result(take_id, transcript=transcript)
 
     profile.transcripts = {**(profile.transcripts or {}), step: transcript}
-    profile.onboarding_state = step
+    _advance(profile, step)
     db.session.commit()
 
     return jsonify({
@@ -406,17 +416,18 @@ def voice_confirm(profile_id, step):
 
         if is_last:
             try:
-                profile.profile_data = extract_profile_data(profile.transcripts or {})
+                extracted = extract_profile_data(profile.transcripts or {})
             except ExtractionError as e:
                 logger.error("Profile extraction failed for %d: %s", profile.id, e)
-                profile.profile_data = {"extraction_error": str(e)}
+                extracted = {"extraction_error": str(e)}
+            _set_extracted(profile, extracted)
 
-            profile.onboarding_state = "review"
+            _advance(profile, "review")
             db.session.commit()
-            next_url = url_for("onboarding.review_step", profile_id=profile.id)
+            next_url = url_for("onboarding.review_step", profile_id=profile.id, draft=1)
         else:
             next_step = VOICE_STEPS[step_index + 1]
-            profile.onboarding_state = next_step
+            _advance(profile, next_step)
             db.session.commit()
             next_url = url_for("onboarding.voice_step", profile_id=profile.id, step=next_step)
 
@@ -445,7 +456,13 @@ def review_step(profile_id):
     """Render the profile review page with extracted structured data."""
     profile = WorkerProfile.query.get_or_404(profile_id)
     profile_data = profile.profile_data or {}
-    has_error = "extraction_error" in profile_data
+    # A re-edit arrives with ?draft=1 to show its unsaved extraction. Edit profile (no flag)
+    # shows the live data, so it never offers an abandoned draft; a failed one shows the
+    # live data with the error banner rather than an empty form.
+    draft = profile.profile_data_draft if request.args.get("draft") else None
+    has_error = "extraction_error" in (draft if draft is not None else profile_data)
+    if draft is not None and not has_error:
+        profile_data = draft
 
     return render_template(
         "onboarding/review.html",
@@ -466,6 +483,7 @@ def save_review(profile_id):
         return jsonify({"error": "Missing profile data"}), 400
 
     profile.profile_data = data
+    profile.profile_data_draft = None
     profile.onboarding_state = "completed"
     db.session.commit()
 
@@ -479,8 +497,9 @@ def re_extract(profile_id):
     profile = WorkerProfile.query.get_or_404(profile_id)
 
     try:
-        profile.profile_data = extract_profile_data(profile.transcripts or {})
+        extracted = extract_profile_data(profile.transcripts or {})
+        _set_extracted(profile, extracted)
         db.session.commit()
-        return jsonify({"success": True, "profile_data": profile.profile_data})
+        return jsonify({"success": True, "profile_data": extracted})
     except ExtractionError as e:
         return jsonify({"error": str(e)}), 502

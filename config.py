@@ -80,6 +80,11 @@ class Config:
     OTP_MAX_PER_PHONE_PER_HOUR = int(os.getenv("OTP_MAX_PER_PHONE_PER_HOUR", "5"))
     OTP_MAX_PER_IP_PER_HOUR = int(os.getenv("OTP_MAX_PER_IP_PER_HOUR", "20"))
 
+    # Public /voice/transcribe (anonymous voice reviews): each call is a Whisper run.
+    # The per-IP cap leaves room for retries and for reviewers sharing one network.
+    TRANSCRIBE_MAX_PER_IP_PER_HOUR = int(os.getenv("TRANSCRIBE_MAX_PER_IP_PER_HOUR", "30"))
+    TRANSCRIBE_MAX_BYTES = int(os.getenv("TRANSCRIBE_MAX_BYTES", str(10 * 1024 * 1024)))
+
     # --- Session cookie hardening -----------------------------------------
     # HttpOnly: JS can't read the cookie (XSS mitigation).
     # SameSite=Lax: not sent on cross-site requests (CSRF mitigation).

@@ -771,6 +771,126 @@ query selects only those columns).
 
 Rollout per host: pull, restart. No migration, no new env keys or dependencies.
 
+### Unfinished profiles + unauthenticated endpoints ✅
+
+Reported by a tester: logged in, quit at the name step without recording, and came back
+to an empty profile. The row is created at OTP success by design (it is the account and
+holds `sms_consent_at`); the bug was that nothing stopped an unfinished profile from being
+*shown*. The home page's "Continue" button (session cookie still alive) went straight to
+`/profiles/<id>/view`, and `/p/<id>` served the empty profile publicly and accepted reviews.
+
+- **Owner view:** `view_profile` redirects an unfinished profile to its onboarding step
+  (`post_auth_url`, the same routing as after login).
+- **Public pages:** `/p/<id>`, its review form and thanks page, and `/profiles/<id>/photo`
+  404 until `onboarding_state == "completed"` (`completed_profile_or_404`).
+
+Auditing every route's auth turned up unauthenticated legacy endpoints, all removed (no
+caller in the app; prod access log showed no hits in 30 days):
+
+- `POST /profiles/` built a `WorkerProfile` from the request JSON, so anyone could create a
+  profile with **someone else's phone number** and `onboarding_state="completed"`; that
+  person's first OTP login would then land in the planted profile.
+- `GET /profiles/`, `GET /profiles/<id>`: every profile's name and `profile_data`.
+- `POST /voice/upload`, `GET /voice/record`, `POST /builder/parse` (whole `profile_builder`
+  blueprint), `GET /onboarding/question/<id>`, `POST /onboarding/transcribe`: free STT/LLM
+  runs and phone-less profile rows. Their dead templates/static went with them.
+
+- **Re-editing:** once completed, a profile stays completed while the worker re-records a step
+  (Edit profile → "Re-record story"); the onboarding steps no longer move its state backwards,
+  which would otherwise take `/p/<id>` (and their printed QR code) offline mid-edit.
+- **Name re-recording:** a recorded name is held in the session and saved only on confirm
+  (edited text wins); rejecting it leaves the saved name as it was. Before, the new take
+  replaced the public name immediately and a reject blanked it. A take that cleans to nothing
+  or to more than the 120-character `name` column is refused at transcribe ("Please say just
+  your name"; before, an over-long one 500'd on save). A worker sitting on the name confirm
+  screen during the deploy sees "Please record your name first" by the buttons and re-records.
+- **Re-edited profile data:** the extraction from a completed profile's re-edit (and the review
+  page's re-extract) goes to `profiles.profile_data_draft` (migration `a9d3f6b1c724`); the
+  re-edit flow lands on `/review?draft=1`, which shows the draft, and saving publishes it.
+  Edit profile (no flag) always shows the live data, so it never offers an abandoned draft,
+  and a failed extraction shows the live data with the retry banner. Before, it overwrote the public
+  `profile_data` (or replaced it with an extraction error) before the worker had reviewed it.
+  Unfinished profiles aren't public and still write `profile_data` directly.
+- **Confirm screen errors:** a refused confirm (empty or too-long edit, no pending name) now
+  shows the server's message by the buttons and re-enables them; it used to say "Saved!"
+  and leave the buttons disabled.
+- **Recorder errors:** a take the server refuses (4xx, e.g. "Please say just your name.") shows
+  that message and goes back to Record; before, every failure said "Couldn't turn that into
+  text. Tap Transcribe to try again." and resending the same take failed again. Whisper
+  failures (502) and replies that aren't JSON keep that generic message and the take. That
+  includes a lost session: the request is redirected to the login page (a 200), which the
+  recorder used to treat as a transcription, discarding the take and showing "Transcription
+  complete". Logging in again from that screen is still up to the worker (no prompt).
+
+Known gaps, left by decision (none is a regression from before this change):
+
+- **Abandoned draft via `?draft=1`.** A draft is cleared only by saving the review page or
+  replaced by the next re-edit. Reloading the abandoned `/review?draft=1` tab, or reaching
+  it from history, shows it again. It is the worker's own extraction of their latest
+  recording, shown for review before any save; Edit profile never offers it.
+- **Transcripts aren't staged.** A re-edit writes `transcripts[step]` at transcribe time, and
+  rejecting the take removes it, so the previous story transcript is lost. After an abandoned
+  re-edit, "Re-extract from Transcripts" on Edit profile extracts the abandoned take. The
+  fix is a transcript draft alongside `profile_data_draft` (follow-up).
+- **Re-extract on Edit profile isn't kept across a reload.** Its result fills the form and is
+  stored as the draft, but the flagless page shows live data again, like any unsaved edit.
+- **Draft flag details:** any non-empty `draft` value counts (`?draft=0` too; nothing links
+  that), and first-time sign-ups also land on `?draft=1`, where it has no effect.
+- **Name:** a confirmed re-recorded name goes public at once (confirming it is its review; no
+  button offers a name re-record on a completed profile). Two tabs recording names: the
+  last take wins. A malformed confirm body (no JSON, non-string `edited_text`) 500s.
+- **Confirm screen, expired session:** the login redirect isn't JSON, so the worker sees
+  "Something went wrong. Please try again." (it said "Network error" before).
+- **Admin extraction-error count** covers unfinished profiles only, so a failed re-edit
+  (held in the draft) isn't counted; it never counted completed profiles.
+- **Transcribe limiter:** best-effort under concurrency (a few requests in flight can pass the
+  cap); a 502 still uses quota; the table-wide prune can briefly wait on another request's
+  delete (milliseconds, committed before the Whisper call); an early 413 may reach a browser
+  as a connection reset (only uploads over 10 MB).
+
+`POST /voice/transcribe` stays public (anonymous voice reviews need it) but is now capped:
+a per-IP hourly limit `TRANSCRIBE_MAX_PER_IP_PER_HOUR` (default 30 → 429), Postgres-backed
+like the OTP limit via the `transcribe_requests` table (migration `f2a8d6c4b913`; rows
+older than the hour are pruned table-wide on each call), checked
+before the body is read so every call counts; then a per-request body cap
+`TRANSCRIBE_MAX_BYTES` (default 10 MB, whole request → 413), so Werkzeug stops reading an
+oversized upload instead of spooling it. The cap is scoped to this route; onboarding uploads
+are unaffected. The review page now shows the server's message for a 4xx (429, 413) instead of
+a bare status code; a 5xx (whose text is technical) and a non-JSON reply (e.g. a proxy page)
+still show "Upload failed: Server error: <status>", keeping the take.
+
+**Before rollout, check prod for planted rows.** The strongest evidence is the access log, over
+everything journald still holds (no `--since`); no output means no call to the removed
+`POST /profiles/` was logged. This came back clean on lab and prod on 2026-10-21. The route stays
+live until this rollout, so repeat it just before rolling out, to cover the time since:
+
+```bash
+journalctl -u voiceprofile | grep -E '"POST /profiles/? HTTP'
+```
+
+Then a read-only heuristic over the data (lists, never deletes). It **cannot prove** a row wasn't
+planted: that endpoint accepted any column (`sms_consent_at`, `created_at`, …), and anyone can
+add an `otp_requests` row for a number just by requesting a code for it. It does catch a planted
+row that only set the obvious fields, and the phone-less rows `/voice/upload` made:
+
+```sql
+SELECT p.id, p.name, p.phone_number, p.onboarding_state, p.created_at, p.sms_consent_at,
+       EXISTS (SELECT 1 FROM otp_requests r WHERE r.phone = p.phone_number) AS has_otp_request
+FROM profiles p
+WHERE p.phone_number IS NULL
+   OR p.sms_consent_at IS NULL
+   OR NOT EXISTS (SELECT 1 FROM otp_requests r WHERE r.phone = p.phone_number)
+ORDER BY p.created_at;
+```
+
+A real sign-up made through the current login has a phone, `sms_consent_at`, and at least
+one `otp_requests` row (the per-phone prune always keeps the newest). Rows older than the
+SMS-consent or OTP-rate-limit rollouts can legitimately miss one of these, so treat the list
+as candidates: look each up in the admin profiles page and delete there only if it isn't a
+real worker.
+
+Rollout per host: pull, `flask db upgrade`, restart. New env keys are optional (defaults above).
+
 ### DGX exposure incident + service hardening (2026-10-25) ✅ (rolled out 2026-10-27)
 
 **What happened.** Prod onboarding showed "Couldn't turn that into text" on every
@@ -998,6 +1118,9 @@ whisper-probe.timer` (or `vllm-probe.timer`).
   Follow-up C.
 - [ ] **Raw voice recordings follow-ups R1–R9** — minor; R1 (decision on the wrong take)
   and R4 (export file permissions) first.
+- [ ] **Planted/orphaned profile check** — read-only query still to run on prod before that
+  rollout; access-log grep clean on lab and prod 2026-10-21, repeat it just before rollout (both
+  under "Unfinished profiles + unauthenticated endpoints").
 - [x] **DGX hardening rollout** — done 2026-10-27 (runbook under "DGX exposure incident").
 - [x] **vLLM bind guard + uptime check** — done 2026-10-28; probe green.
 - [x] **Whisper uptime check** — done 2026-10-28; probe green.

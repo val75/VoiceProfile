@@ -3,12 +3,14 @@
 import io
 import logging
 
-from flask import Blueprint, request, jsonify, render_template, url_for, send_file, Response
+from flask import Blueprint, request, jsonify, render_template, url_for, send_file, Response, redirect
 from PIL import Image, ImageOps
 from extensions.database import db
 from models.profile import WorkerProfile
 from models.review import Review
 from blueprints.auth.decorators import profile_owner_required
+from blueprints.auth.routes import post_auth_url
+from services.profile_service import COMPLETED, completed_profile_or_404
 
 logger = logging.getLogger(__name__)
 
@@ -29,31 +31,13 @@ def _process_avatar(file_storage) -> bytes:
     return buf.getvalue()
 
 
-@profiles_bp.route("/", methods=["POST"])
-def create_profile():
-    data = request.get_json()
-    profile = WorkerProfile(**data)
-    db.session.add(profile)
-    db.session.commit()
-    return jsonify({"id": profile.id}), 201
-
-
-@profiles_bp.route("/<int:profile_id>", methods=["GET"])
-def get_profile(profile_id):
-    profile = WorkerProfile.query.get(profile_id)
-    if not profile:
-        return jsonify({"error": "Profile not found"}), 404
-    return jsonify({
-        "id": profile.id,
-        "name": profile.name,
-        "profile_data": profile.profile_data
-    })
-
-
 @profiles_bp.route("/<int:profile_id>/view", methods=["GET"])
 @profile_owner_required
 def view_profile(profile_id):
     profile = WorkerProfile.query.get_or_404(profile_id)
+    if profile.onboarding_state != COMPLETED:
+        # e.g. a sign-up abandoned at the name step: resume onboarding, don't show an empty profile.
+        return redirect(post_auth_url(profile))
     edit_url = url_for("onboarding.review_step", profile_id=profile.id)
     reviews = Review.query.filter_by(profile_id=profile_id).order_by(Review.created_at.desc()).all()
     return render_template("profiles/view.html", profile=profile, edit_url=edit_url, reviews=reviews)
@@ -74,7 +58,7 @@ def qr_code(profile_id):
 @profiles_bp.route("/<int:profile_id>/photo", methods=["GET"])
 def photo(profile_id):
     """Serve the profile photo. Public so visitors can see it on the public page."""
-    profile = WorkerProfile.query.get_or_404(profile_id)
+    profile = completed_profile_or_404(profile_id)
     if not profile.photo:
         return "", 404
     resp = Response(profile.photo, mimetype=profile.photo_mime or "image/jpeg")
@@ -106,17 +90,4 @@ def upload_photo(profile_id):
     db.session.commit()
 
     return jsonify({"success": True, "photo_url": url_for("profiles.photo", profile_id=profile.id)})
-
-
-@profiles_bp.route("/", methods=["GET"])
-def list_profiles():
-    profiles = WorkerProfile.query.all()
-    result = []
-    for p in profiles:
-        result.append({
-            "id": p.id,
-            "name": p.name,
-            "profile_data": p.profile_data
-        })
-    return jsonify(result)
 

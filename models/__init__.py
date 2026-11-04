@@ -7,6 +7,7 @@ from .otp import OTPCode
 from .otp_request import OTPRequest
 from .admin import AdminUser, AdminIdentity
 from .recording import VoiceRecording
+from .transcribe_request import TranscribeRequest
 
 __all__ = ["WorkerProfile", "Review", "OTPCode", "OTPRequest", "AdminUser", "AdminIdentity",
-           "VoiceRecording"]
+           "VoiceRecording", "TranscribeRequest"]

@@ -150,15 +150,17 @@
 
         const response = await fetch('/voice/transcribe', { method: 'POST', body: formData });
 
-        if (!response.ok) throw new Error(`Server error: ${response.status}`);
-
-        const data = await response.json();
-
-        if (data.error) {
+        // A 4xx (429 rate limit, 413 too long) carries a message written for people in
+        // { error }. Anything else short of a clean success (a 5xx, whose text is
+        // technical, or a reply that isn't our JSON at all, e.g. a proxy's HTML page,
+        // even with a 200) is a failure, so the take is kept for a retry.
+        const data = await response.json().catch(() => null);
+        if (response.status >= 400 && response.status < 500 && data?.error) {
           this.updateStatus(`Error: ${data.error}`, 'error');
           this.elements.sendBtn.disabled = false;
           return;
         }
+        if (!response.ok || !data || data.error) throw new Error(`Server error: ${response.status}`);
 
         if (typeof this.options.onSuccess === 'function') {
           this.options.onSuccess(data);

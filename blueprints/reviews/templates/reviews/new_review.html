@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Review {{ profile.name }}</title>
     <link rel="stylesheet" href="{{ url_for('reviews.static', filename='reviews/css/reviews.css') }}">
+    <link rel="stylesheet" href="{{ url_for('onboarding.static', filename='onboarding/css/recordButton.css') }}">
 </head>
 <body>
     <div class="container">
@@ -29,30 +30,24 @@
             <!-- Your name -->
             <div class="form-group">
                 <label for="reviewer_name">Your name <span style="font-weight:400;color:#9ca3af">(optional)</span></label>
-                <input type="text" id="reviewer_name" name="reviewer_name" placeholder="Anonymous" maxlength="120">
+                <input type="text" id="reviewer_name" name="reviewer_name" placeholder="Anonymous" maxlength="120" value="{{ form.get('reviewer_name', '') }}">
             </div>
 
             <!-- Star rating -->
             <div class="form-group">
                 <label>Rating</label>
                 <div class="star-rating">
-                    <input type="radio" id="star5" name="rating" value="5">
-                    <label for="star5" title="5 stars">★</label>
-                    <input type="radio" id="star4" name="rating" value="4">
-                    <label for="star4" title="4 stars">★</label>
-                    <input type="radio" id="star3" name="rating" value="3">
-                    <label for="star3" title="3 stars">★</label>
-                    <input type="radio" id="star2" name="rating" value="2">
-                    <label for="star2" title="2 stars">★</label>
-                    <input type="radio" id="star1" name="rating" value="1">
-                    <label for="star1" title="1 star">★</label>
+                    {% for stars in [5, 4, 3, 2, 1] %}
+                    <input type="radio" id="star{{ stars }}" name="rating" value="{{ stars }}"{% if form.get('rating') == stars|string %} checked{% endif %}>
+                    <label for="star{{ stars }}" title="{{ stars }} star{{ 's' if stars > 1 }}">★</label>
+                    {% endfor %}
                 </div>
             </div>
 
             <!-- Review text -->
             <div class="form-group">
                 <label for="content">Your review</label>
-                <textarea id="content" name="content" rows="5" placeholder="What was it like working with {{ profile.name }}?" required></textarea>
+                <textarea id="content" name="content" rows="5" placeholder="What was it like working with {{ profile.name }}?" required>{{ form.get('content', '') }}</textarea>
             </div>
 
             <!-- Voice toggle -->
@@ -70,19 +65,12 @@
                     <div class="bar"></div><div class="bar"></div><div class="bar"></div>
                     <div class="bar"></div><div class="bar"></div>
                 </div>
-                <div class="recorder-controls">
-                    <button type="button" id="voiceRecord">
-                        <span>🎙</span>
-                        <span id="voiceRecordText">Record</span>
-                    </button>
-                    <button type="button" id="voiceStop" disabled>⏹ Stop</button>
-                    <button type="button" id="voiceSend" disabled>📤 Send</button>
-                </div>
-                <p class="recorder-status" id="voiceStatus">Press Record to start</p>
+                <p id="voiceStatus" aria-live="polite">Tap Record to start.</p>
+                {% include "onboarding/_record_controls.html" %}
             </div>
 
             <!-- Hidden raw transcript for storage -->
-            <input type="hidden" id="transcript" name="transcript">
+            <input type="hidden" id="transcript" name="transcript" value="{{ form.get('transcript', '') }}">
 
             <button type="submit" class="btn-primary" style="width:100%;padding:14px;font-size:16px;margin-top:8px">
                 Submit Review
@@ -90,8 +78,8 @@
         </form>
     </div>
 
-    <script src="{{ url_for('reviews.static', filename='reviews/js/audioVisualizer.js') }}"></script>
-    <script src="{{ url_for('reviews.static', filename='reviews/js/voiceRecorder.js') }}"></script>
+    <script src="{{ url_for('onboarding.static', filename='onboarding/js/audioVisualizer.js') }}"></script>
+    <script src="{{ url_for('onboarding.static', filename='onboarding/js/voiceRecorder.js') }}"></script>
     <script>
     (function() {
       const toggleBtn = document.getElementById('toggleVoice');
@@ -106,25 +94,28 @@
 
       const recorder = new window.VoiceRecorder(
         {
-          recordBtn:  document.getElementById('voiceRecord'),
-          stopBtn:    document.getElementById('voiceStop'),
-          sendBtn:    document.getElementById('voiceSend'),
-          recordText: document.getElementById('voiceRecordText'),
-          visualizer: document.getElementById('voiceVisualizer'),
-          bars:       document.querySelectorAll('#voiceVisualizer .bar'),
-          status:     document.getElementById('voiceStatus'),
-          timer:      document.getElementById('voiceTimer'),
+          recordBtn:   document.getElementById('recordBtn'),
+          recordIcon:  document.getElementById('recordIcon'),
+          recordLabel: document.getElementById('recordLabel'),
+          againBtn:    document.getElementById('againBtn'),
+          controls:    document.getElementById('controls'),
+          visualizer:  document.getElementById('voiceVisualizer'),
+          bars:        document.querySelectorAll('#voiceVisualizer .bar'),
+          status:      document.getElementById('voiceStatus'),
+          timer:       document.getElementById('voiceTimer'),
         },
         {
           onSuccess: function(data) {
+            recorder.reset();
             if (data.text) {
               contentArea.value = data.text;
               transcriptInput.value = data.text;
               voicePanel.classList.remove('visible');
               toggleBtn.textContent = '🎙 Record instead of typing';
               contentArea.focus();
-              document.getElementById('voiceStatus').textContent = 'Transcript copied to review — edit if needed.';
-              document.getElementById('voiceStatus').className = 'recorder-status success';
+              recorder.updateStatus('Transcript copied to review — edit if needed.', 'success');
+            } else {
+              recorder.updateStatus("We didn't catch that. Please try again.", 'error');
             }
           }
         }

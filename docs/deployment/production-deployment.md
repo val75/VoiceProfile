@@ -771,7 +771,7 @@ query selects only those columns).
 
 Rollout per host: pull, restart. No migration, no new env keys or dependencies.
 
-### Unfinished profiles + unauthenticated endpoints ✅
+### Unfinished profiles + unauthenticated endpoints ✅ (rolled out 2026-11-08)
 
 Reported by a tester: logged in, quit at the name step without recording, and came back
 to an empty profile. The row is created at OTP success by design (it is the account and
@@ -890,6 +890,13 @@ as candidates: look each up in the admin profiles page and delete there only if 
 real worker.
 
 Rollout per host: pull, `flask db upgrade`, restart. New env keys are optional (defaults above).
+
+**Rolled out 2026-11-08 (`65675fe`, with `5cec0c9`), prod then lab; all checks passed.** The
+pre-rollout log grep was clean on prod. The SQL listed one row, profile 1: the owner's own
+early test profile (placeholder number `+11234567890`, from before SMS consent and the OTP log),
+not a planted row. Prod's `git pull` stopped on a hand edit to `templates/index.html` (the
+ShareGud title and heading); `5cec0c9` committed that rebrand, so the server copy was reset
+with `git checkout` and pulled. Make branding changes in the repo, not on a server.
 
 ### DGX exposure incident + service hardening (2026-10-25) ✅ (rolled out 2026-10-27)
 
@@ -1087,6 +1094,18 @@ systemctl list-timers whisper-probe.timer
 To turn a probe off (Whisper or vLLM): pause its check in healthchecks.io first,
 so the missing pings don't email, then `sudo systemctl disable --now
 whisper-probe.timer` (or `vllm-probe.timer`).
+
+### Review page: one-button recorder, form keeps its values ✅
+
+- **Recorder:** the review page now uses onboarding's `voiceRecorder.js`, `audioVisualizer.js`
+  and one-button controls; its own older copies are gone, and the shared button styles moved to
+  `onboarding/css/recordButton.css`. A Whisper failure now reads "Couldn't turn that into text.
+  Tap Transcribe to try again." A rate-limited or too-long take (429/413) shows the server's
+  message and goes back to Record, so that take is dropped; the reviewer can still type.
+- **Form:** a rejected submit (no rating, or no text) reloads with the name, rating, text and
+  transcript still filled in. It used to come back blank.
+
+Rollout per host: pull, restart. No migration, no new env keys or dependencies.
 
 ---
 

@@ -271,42 +271,6 @@ body {
 }
 #voicePanel.visible { display: block; }
 
-.recorder-controls {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 12px;
-    flex-wrap: wrap;
-}
-
-.recorder-controls button {
-    flex: 1;
-    min-width: 90px;
-    padding: 10px 14px;
-    font-size: 14px;
-    font-weight: 600;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.recorder-controls button:disabled { opacity: 0.45; cursor: not-allowed; }
-
-#voiceRecord { background: #10b981; color: white; }
-#voiceRecord:hover:not(:disabled) { background: #059669; }
-#voiceRecord.recording { background: #ef4444; animation: pulse 1.5s infinite; }
-
-#voiceStop { background: #f59e0b; color: white; }
-#voiceStop:hover:not(:disabled) { background: #d97706; }
-
-#voiceSend { background: #3b82f6; color: white; }
-#voiceSend:hover:not(:disabled) { background: #2563eb; }
-
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.7; }
-}
-
 .recorder-timer {
     font-size: 18px;
     font-weight: 700;
@@ -335,14 +299,15 @@ body {
     transition: height 0.1s ease;
 }
 
-.recorder-status {
+/* By id: the shared recorder replaces the element's class with its state. */
+#voiceStatus {
     font-size: 13px;
     color: #6b7280;
     text-align: center;
     min-height: 20px;
 }
-.recorder-status.error { color: #dc2626; }
-.recorder-status.success { color: #059669; }
+#voiceStatus.error { color: #dc2626; }
+#voiceStatus.success { color: #059669; }
 
 /* ── Thank-you page ────────────────────────────────────────────────────── */
 .thanks-icon { font-size: 3rem; text-align: center; margin-bottom: 16px; }

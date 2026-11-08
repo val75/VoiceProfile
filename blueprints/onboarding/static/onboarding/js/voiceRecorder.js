@@ -275,8 +275,11 @@
         const formData = new FormData();
         formData.append('audio', blob, `voice.${extension}`);
 
-        const questionId = document.getElementById('questionId').value;
-        formData.append('question_id', questionId);
+        // Onboarding pages have a question; the public review page doesn't.
+        const questionId = document.getElementById('questionId');
+        if (questionId) {
+          formData.append('question_id', questionId.value);
+        }
         if (this.lastDurationMs != null) {
           formData.append('duration_ms', String(this.lastDurationMs));
         }

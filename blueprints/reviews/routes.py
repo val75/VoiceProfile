@@ -33,10 +33,10 @@ def new_review(profile_id):
 
         if not rating or not (1 <= rating <= 5):
             flash("Please select a rating.")
-            return render_template("reviews/new_review.html", profile=profile)
+            return render_template("reviews/new_review.html", profile=profile, form=request.form)
         if not content:
             flash("Please write something in your review.")
-            return render_template("reviews/new_review.html", profile=profile)
+            return render_template("reviews/new_review.html", profile=profile, form=request.form)
 
         review = Review(
             profile_id=profile_id,
@@ -49,7 +49,7 @@ def new_review(profile_id):
         db.session.commit()
         return redirect(url_for("reviews.thanks", profile_id=profile_id))
 
-    return render_template("reviews/new_review.html", profile=profile)
+    return render_template("reviews/new_review.html", profile=profile, form=request.form)
 
 
 @reviews_bp.route("/<int:profile_id>/review/thanks")

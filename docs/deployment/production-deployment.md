@@ -1095,7 +1095,7 @@ To turn a probe off (Whisper or vLLM): pause its check in healthchecks.io first,
 so the missing pings don't email, then `sudo systemctl disable --now
 whisper-probe.timer` (or `vllm-probe.timer`).
 
-### Review page: one-button recorder, form keeps its values ✅
+### Review page: one-button recorder, form keeps its values ✅ (rolled out 2026-11-08)
 
 - **Recorder:** the review page now uses onboarding's `voiceRecorder.js`, `audioVisualizer.js`
   and one-button controls; its own older copies are gone, and the shared button styles moved to
@@ -1105,7 +1105,8 @@ whisper-probe.timer` (or `vllm-probe.timer`).
 - **Form:** a rejected submit (no rating, or no text) reloads with the name, rating, text and
   transcript still filled in. It used to come back blank.
 
-Rollout per host: pull, restart. No migration, no new env keys or dependencies.
+Rollout per host: pull, restart. No migration, no new env keys or dependencies. Rolled out
+on lab and prod 2026-11-08 (`61cf571`); all checks passed, including on a phone.
 
 ---
 

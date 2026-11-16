@@ -1,0 +1,33 @@
+# VoiceProfile container stack.
+#
+# Lives at /srv/voiceprofile/compose.yml on each host. deploy/deploy.sh
+# downloads it at the same git SHA as the image it deploys and writes
+# VP_TAG=<sha> to /srv/voiceprofile/.env, so one SHA pins both.
+#
+# Step 1 (now): only the app is containerized. It shares the host's network
+# (network_mode: host), so gunicorn binds 127.0.0.1:5001 exactly as under
+# systemd, and DATABASE_URL keeps pointing at the native PostgreSQL on
+# localhost. Nothing is published, so Docker's ufw bypass does not apply.
+#
+# Secrets: app.env next to this file (mode 600), never in git.
+# Logs: journald, e.g. `journalctl -t voiceprofile-app -f`.
+name: voiceprofile
+
+services:
+  app:
+    image: ghcr.io/val75/voiceprofile:${VP_TAG:?VP_TAG unset; run deploy.sh}
+    env_file: app.env
+    network_mode: host
+    restart: unless-stopped
+    # gunicorn's graceful_timeout is 30s; let in-flight requests drain.
+    stop_grace_period: 35s
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5001/healthz', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: journald
+      options:
+        tag: voiceprofile-app

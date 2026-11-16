@@ -3,11 +3,15 @@
 #
 # See docs/deployment/production-deployment.md for the full rationale.
 
+import os
+
 # --- Where to listen -------------------------------------------------------
 # Loopback only. Cloudflare Tunnel (cloudflared) runs on this same box and
 # dials 127.0.0.1:5001; nothing should reach the app except through the tunnel.
-# Do NOT bind 0.0.0.0 here — that would re-expose the app on the public IP.
-bind = "127.0.0.1:5001"
+# Do NOT bind 0.0.0.0 on a host — that would re-expose the app on the public IP.
+# GUNICORN_BIND exists for containers on a Compose network, where 0.0.0.0 is
+# the container's own interface and the host publishes only 127.0.0.1:5001.
+bind = os.getenv("GUNICORN_BIND", "127.0.0.1:5001")
 
 # --- Concurrency -----------------------------------------------------------
 # Requests are I/O-bound: most of their time is spent waiting on the DGX

@@ -1,0 +1,21 @@
+# Never ship secrets or local state into the image (the repo and image are public).
+.env
+.env*
+**/.env
+venv/
+**/__pycache__/
+*.pyc
+.git/
+.github/
+.idea/
+.DS_Store
+# Planning notes, docs, exports and dumps
+tasks/
+docs/
+exports/
+*.dump
+*.wav
+# Not part of the app image (deploy/ stays: tests cover backup_db.sh)
+whisper_service/
+Dockerfile
+.dockerignore
